@@ -1,5 +1,6 @@
 use std::fs;
 
+use chrono::TimeZone;
 use color_eyre::eyre::{eyre, Context, ContextCompat};
 use fancy_regex::Regex;
 use futures_util::StreamExt;
@@ -7,7 +8,7 @@ use kuchiki::traits::TendrilSink;
 use parsoid::WikinodeIterator;
 use reqwest::redirect::Policy;
 use serde::Deserialize;
-use tracing::info;
+use tracing::{info, debug};
 use url::Url;
 use wiki::api::QueryResponse;
 use wiki::builder::SiteBuilder;
@@ -20,7 +21,7 @@ const UA: &str = concat!(
     " (https://github.com/fee1-dead/deadbeefbot; ent3rm4n@gmail.com) mwapi/0.4.3 parsoid/0.7.4"
 );
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct EditMessage {
     pub links_fixed: usize,
     pub wayback_links_fixed: usize,
@@ -63,7 +64,7 @@ const SUPPORTED_SITES: &'static [SiteCfg] = &[
             )
         },
     },
-    SiteCfg {
+    /*SiteCfg {
         name: "Chinese Wikipedia",
         api_url: "https://zh.wikipedia.org/w/api.php",
         parsoid_url: "https://zh.wikipedia.org/api/rest_v1",
@@ -74,11 +75,11 @@ const SUPPORTED_SITES: &'static [SiteCfg] = &[
             format!("BOT：已从{links_fixed}个Twitter外链删除追踪参数，同时修改{wayback_links_fixed}个存档链接 \
             ([[Wikipedia:机器人/申请/DeadbeefBot|BRFA]])")
         },
-    },
+    },*/
 ];
 
 async fn run(site: &SiteCfg) -> color_eyre::Result<()> {
-    println!("Running on {}", site.name);
+    info!("Running on {}", site.name);
 
     let client = SiteBuilder::new(site.api_url)
         .oauth(
@@ -131,12 +132,14 @@ async fn run(site: &SiteCfg) -> color_eyre::Result<()> {
             .into(),
         ),
         generator: Some(QueryGenerator::Search(SearchGenerator {
-            search: SEARCH.into(),
+            // search: SEARCH.into(),
+            // namespace: "0".into(),
             limit: Limit::Value(20), // content too big
             offset: None,
             info: SearchInfo::empty(),
             prop: SearchProp::empty(),
-            namespace: "0".into(),
+            search: "7YzahhfuteRXHs5EtZcP".into(),
+            namespace: "2".into(),
         })),
         ..Default::default()
     });
@@ -176,8 +179,10 @@ async fn run(site: &SiteCfg) -> color_eyre::Result<()> {
             for template in code.filter_templates()? {
                 let wre = &wre;
                 let c = &c;
+                let edit_msg = &mut edit_msg;
                 let re: color_eyre::Result<()> = (|| async move {
                     let name = template.name().to_lowercase();
+                    debug!(?name);
                     if name != "template:cite web" && name != "template:cite tweet" {
                         return Ok(());
                     }
@@ -186,13 +191,15 @@ async fn run(site: &SiteCfg) -> color_eyre::Result<()> {
                     let timestamp = &captures[1];
                     let url = &captures[2];
                     let new_url = treat(url)?;
+                    debug!(?url, ?new_url);
                     if new_url == url {
-                        Err(eyre!("no change"))?;
+                        return Ok(());
                     }
 
                     // https://web.archive.org/web/20220624234724/https://twitter.com/MariahCarey/status/1314585670644641794
                     let url = format!("https://web.archive.org/web/{timestamp}/{new_url}");
                     let resp = c.get(&url).send().await?;
+                    debug!(?resp);
                     // x-archive-redirect-reason: found capture at 20220624234724
                     // location https://web.archive.org/web/20220624234724/https://twitter.com/MariahCarey/status/1314585670644641794
                     let mut actual_url = url;
@@ -233,7 +240,7 @@ async fn run(site: &SiteCfg) -> color_eyre::Result<()> {
                         .context("url should match regex")?
                         .as_str();
 
-                    let time = chrono::DateTime::parse_from_str(time, "%Y%m%d%H%M%S")?;
+                    let time = chrono::Utc.datetime_from_str(time, "%Y%m%d%H%M%S")?;
 
                     let date = time.format("%Y-%m-%d");
                     template.set_param("archive-url", &actual_url).unwrap();
@@ -265,6 +272,7 @@ async fn run(site: &SiteCfg) -> color_eyre::Result<()> {
                 }
             }
 
+            debug!(?edit_msg);
             if edit_msg.links_fixed + edit_msg.wayback_links_fixed > 0 {
                 client
                     .build_edit(PageSpec::PageId(page_id))
