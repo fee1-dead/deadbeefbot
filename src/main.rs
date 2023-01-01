@@ -105,6 +105,8 @@ async fn run(site: &SiteCfg) -> color_eyre::Result<()> {
     const SEARCH: &str =
         r"insource:/twitter\.com\/[a-zA-Z0-9]+\/status\/[0-9]+\/?\?([st]|cxt|ref_[a-z]+)=/";
 
+    let bots = Regex::new(r"(?i:\{\{(nobots|bots\|allow=none|bots\|deny=all|bots\|optout=all|bots\|deny=.*?DeadbeefBot.*?)")?;
+
     static BAD_PARAMS: &[&str] = &["cxt", "ref_src", "ref_url", "s", "t"];
 
     #[derive(Deserialize)]
@@ -258,6 +260,11 @@ async fn run(site: &SiteCfg) -> color_eyre::Result<()> {
             }
 
             let text = parsoid.transform_to_wikitext(&code).await?;
+
+            if bots.is_match(&text)? {
+                continue;
+            }
+
             let mut newtext = text.clone();
 
             let matches: Vec<_> = re.find_iter(&text).collect();
