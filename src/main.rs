@@ -1,8 +1,6 @@
-#![feature(try_blocks)]
 use std::fs;
-use std::str::FromStr;
 
-use color_eyre::eyre::{bail, eyre, Context, ContextCompat};
+use color_eyre::eyre::{eyre, Context, ContextCompat};
 use fancy_regex::Regex;
 use futures_util::StreamExt;
 use kuchiki::traits::TendrilSink;
@@ -11,10 +9,10 @@ use reqwest::redirect::Policy;
 use serde::Deserialize;
 use tracing::info;
 use url::Url;
-use wiki::api::{QueryResponse, RequestBuilderExt, RevisionSlots, SlotsMain};
+use wiki::api::QueryResponse;
 use wiki::builder::SiteBuilder;
 use wiki::req::search::{SearchGenerator, SearchInfo, SearchProp};
-use wiki::req::{self, Action, EditBuilder, Limit, PageSpec, Query, QueryGenerator};
+use wiki::req::{self, Limit, PageSpec, Query, QueryGenerator};
 
 const UA: &str = concat!(
     "DeadbeefBot/",
@@ -110,12 +108,12 @@ async fn run(site: &SiteCfg) -> color_eyre::Result<()> {
 
     #[derive(Deserialize)]
     struct Revision {
-        slots: SlotsMain,
         revid: u32,
     }
     #[derive(Deserialize)]
     struct SearchResult {
         pageid: u32,
+        title: String,
         revisions: Vec<Revision>,
     }
     #[derive(Deserialize)]
@@ -126,7 +124,7 @@ async fn run(site: &SiteCfg) -> color_eyre::Result<()> {
     let mut stream = client.query_all(Query {
         prop: Some(
             req::QueryProp::Revisions(req::QueryPropRevisions {
-                prop: req::RvProp::CONTENT,
+                prop: req::RvProp::IDS,
                 slots: req::RvSlot::Main.into(),
                 limit: req::Limit::None,
             })
@@ -134,10 +132,11 @@ async fn run(site: &SiteCfg) -> color_eyre::Result<()> {
         ),
         generator: Some(QueryGenerator::Search(SearchGenerator {
             search: SEARCH.into(),
-            limit: Limit::Max,
+            limit: Limit::Value(20), // content too big
             offset: None,
             info: SearchInfo::empty(),
             prop: SearchProp::empty(),
+            namespace: "0".into(),
         })),
         ..Default::default()
     });
@@ -145,13 +144,18 @@ async fn run(site: &SiteCfg) -> color_eyre::Result<()> {
     fn treat(s: &str) -> color_eyre::Result<String> {
         let mut url = Url::parse(s)?;
         let mut s = form_urlencoded::Serializer::new(String::new());
+        let mut some = false;
         for (key, value) in url.query_pairs() {
             if !BAD_PARAMS.contains(&&*key) {
                 s.append_pair(&key, &value);
+                some = true;
             }
         }
-        let q = s.finish();
-        url.set_query(Some(&q));
+        if some {
+            url.set_query(Some(&s.finish()));
+        } else {
+            url.set_query(None);
+        }
         Ok(url.into())
     }
 
@@ -162,28 +166,20 @@ async fn run(site: &SiteCfg) -> color_eyre::Result<()> {
             let rev = page.revisions.pop().unwrap();
             let page_id = page.pageid;
             let rev_id = rev.revid;
-            let text = rev.slots.main.content;
-            let mut newtext = text.clone();
+
             let mut edit_msg = EditMessage::default();
 
-            let matches: Vec<_> = re.find_iter(&text).collect();
-            for m in matches.into_iter().rev() {
-                let m = m?;
-                let new_url = treat(m.as_str())?;
-
-                if new_url != m.as_str() {
-                    // yay!
-                    newtext.replace_range(m.range(), &new_url);
-                    edit_msg.links_fixed += 1;
-                }
-            }
-
-            let code = parsoid.transform_to_html(&newtext).await?.into_mutable();
+            let code = parsoid
+                .get_revision(&page.title, rev_id as u64)
+                .await?
+                .into_mutable();
             for template in code.filter_templates()? {
-                let re: color_eyre::Result<()> = try {
+                let wre = &wre;
+                let c = &c;
+                let re: color_eyre::Result<()> = (|| async move {
                     let name = template.name().to_lowercase();
                     if name != "template:cite web" && name != "template:cite tweet" {
-                        Err(eyre!("not a cite web/tweet"))?;
+                        return Ok(());
                     }
                     let param = template.param("archive-url").context("archive url")?;
                     let captures = wre.captures(&param)?.context("match regex")?;
@@ -245,26 +241,37 @@ async fn run(site: &SiteCfg) -> color_eyre::Result<()> {
                         .set_param("archive-date", &date.to_string())
                         .unwrap();
                     edit_msg.wayback_links_fixed += 1;
-                };
+                    Ok(())
+                })()
+                .await;
 
                 if let Err(e) = re {
                     info!("did not fix archive: {e}");
                 }
             }
 
-            if edit_msg.links_fixed + edit_msg.wayback_links_fixed > 0 {
-                let newtext = code.to_string();
+            let text = parsoid.transform_to_wikitext(&code).await?;
+            let mut newtext = text.clone();
 
-                let edit = client
+            let matches: Vec<_> = re.find_iter(&text).collect();
+            for m in matches.into_iter().rev() {
+                let m = m?;
+                let new_url = treat(m.as_str())?;
+
+                if new_url != m.as_str() {
+                    // yay!
+                    newtext.replace_range(m.range(), &new_url);
+                    edit_msg.links_fixed += 1;
+                }
+            }
+
+            if edit_msg.links_fixed + edit_msg.wayback_links_fixed > 0 {
+                client
                     .build_edit(PageSpec::PageId(page_id))
                     .text(newtext)
                     .summary((site.format)(edit_msg))
                     .baserevid(rev_id)
-                    .build();
-
-                client
-                    .post(Action::Edit(edit))
-                    .send_and_report_err()
+                    .send()
                     .await?;
 
                 panic!();
@@ -276,6 +283,10 @@ async fn run(site: &SiteCfg) -> color_eyre::Result<()> {
 }
 
 async fn real_main() -> color_eyre::Result<()> {
+    color_eyre::install()?;
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .init();
     for site in SUPPORTED_SITES {
         run(site).await?;
     }
