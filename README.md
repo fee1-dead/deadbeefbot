@@ -1,7 +1,7 @@
 A port of scannerbot to Rust.
 
 # Tasks
-s
+
 * Fix twitter tracker links (including archive links)
 
 # Licensing
