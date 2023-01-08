@@ -8,7 +8,7 @@ use kuchiki::traits::TendrilSink;
 use parsoid::WikinodeIterator;
 use reqwest::redirect::Policy;
 use serde::Deserialize;
-use tracing::{info, debug};
+use tracing::{debug, info};
 use url::Url;
 use wiki::api::QueryResponse;
 use wiki::builder::SiteBuilder;
@@ -58,7 +58,7 @@ const SUPPORTED_SITES: &'static [SiteCfg] = &[
 
             format!(
                 "Removing Twitter tracker params \
-                ([[Wikipedia:Bots/Requests_for_approval/ScannerBot|BRFA]]) \
+                ([[Wikipedia:Bots/Requests for approval/DeadbeefBot 1|BRFA]]) \
                 ({links_fixed} link{lpl} fixed, \
                     {wayback_links_fixed} archive link{wpl} fixed)"
             )
@@ -105,21 +105,23 @@ async fn run(site: &SiteCfg) -> color_eyre::Result<()> {
     const SEARCH: &str =
         r"insource:/twitter\.com\/[a-zA-Z0-9]+\/status\/[0-9]+\/?\?([st]|cxt|ref_[a-z]+)=/";
 
-    let bots = Regex::new(r"(?i:\{\{(nobots|bots\|allow=none|bots\|deny=all|bots\|optout=all|bots\|deny=.*?DeadbeefBot.*?)")?;
+    let bots = Regex::new(
+        r"(?i:\{\{(nobots|bots\|allow=none|bots\|deny=all|bots\|optout=all|bots\|deny=.*?DeadbeefBot.*?))",
+    )?;
 
     static BAD_PARAMS: &[&str] = &["cxt", "ref_src", "ref_url", "s", "t"];
 
-    #[derive(Deserialize)]
+    #[derive(Deserialize, Debug)]
     struct Revision {
         revid: u32,
     }
-    #[derive(Deserialize)]
+    #[derive(Deserialize, Debug)]
     struct SearchResult {
         pageid: u32,
         title: String,
         revisions: Vec<Revision>,
     }
-    #[derive(Deserialize)]
+    #[derive(Deserialize, Debug)]
     struct SearchResponseBody {
         pages: Vec<SearchResult>,
     }
@@ -134,14 +136,14 @@ async fn run(site: &SiteCfg) -> color_eyre::Result<()> {
             .into(),
         ),
         generator: Some(QueryGenerator::Search(SearchGenerator {
-            // search: SEARCH.into(),
-            // namespace: "0".into(),
+            search: SEARCH.into(),
+            namespace: "0".into(),
             limit: Limit::Value(20), // content too big
             offset: None,
             info: SearchInfo::empty(),
             prop: SearchProp::empty(),
-            search: "7YzahhfuteRXHs5EtZcP".into(),
-            namespace: "2".into(),
+            // search: "7YzahhfuteRXHs5EtZcP".into(),
+            // namespace: "2".into(),
         })),
         ..Default::default()
     });
@@ -174,6 +176,8 @@ async fn run(site: &SiteCfg) -> color_eyre::Result<()> {
 
             let mut edit_msg = EditMessage::default();
 
+            debug!(?page);
+
             let code = parsoid
                 .get_revision(&page.title, rev_id as u64)
                 .await?
@@ -184,12 +188,11 @@ async fn run(site: &SiteCfg) -> color_eyre::Result<()> {
                 let edit_msg = &mut edit_msg;
                 let re: color_eyre::Result<()> = (|| async move {
                     let name = template.name().to_lowercase();
-                    debug!(?name);
                     if name != "template:cite web" && name != "template:cite tweet" {
                         return Ok(());
                     }
-                    let param = template.param("archive-url").context("archive url")?;
-                    let captures = wre.captures(&param)?.context("match regex")?;
+                    let Some(param) = template.param("archive-url") else { return Ok(()) };
+                    let Some(captures) = wre.captures(&param)? else { return Ok(()) };
                     let timestamp = &captures[1];
                     let url = &captures[2];
                     let new_url = treat(url)?;
@@ -259,7 +262,19 @@ async fn run(site: &SiteCfg) -> color_eyre::Result<()> {
                 }
             }
 
-            let text = parsoid.transform_to_wikitext(&code).await?;
+            // TODO make this fail fast
+            let         Ok                      (
+                        text            )
+                                                =
+                        parsoid                 .
+                        transform_to_wikitext   (
+                                                &
+                        code                    )
+                                                .
+            await
+            else                                {
+            continue                            }
+                                                ;
 
             if bots.is_match(&text)? {
                 continue;
@@ -286,10 +301,13 @@ async fn run(site: &SiteCfg) -> color_eyre::Result<()> {
                     .text(newtext)
                     .summary((site.format)(edit_msg))
                     .baserevid(rev_id)
+                    .minor()
+                    .bot()
                     .send()
                     .await?;
 
-                panic!();
+                // TODO remove this
+                tokio::time::sleep(std::time::Duration::from_secs(5)).await;
             }
         }
     }
