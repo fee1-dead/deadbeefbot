@@ -55,12 +55,18 @@ const SUPPORTED_SITES: &'static [SiteCfg] = &[
                  }| {
             let lpl = pluralize!(links_fixed);
             let wpl = pluralize!(wayback_links_fixed);
+            let wayback = if wayback_links_fixed > 0 {
+                format!(
+                    ", {wayback_links_fixed} archive link{wpl} fixed",
+                )
+            } else {
+                "".to_string()
+            };
 
             format!(
                 "Removing Twitter tracker params \
                 ([[Wikipedia:Bots/Requests for approval/DeadbeefBot 1|BRFA]]) \
-                ({links_fixed} link{lpl} fixed, \
-                    {wayback_links_fixed} archive link{wpl} fixed)"
+                ({links_fixed} link{lpl} fixed{wayback})"
             )
         },
     },
