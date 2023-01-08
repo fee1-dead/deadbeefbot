@@ -298,10 +298,6 @@ async fn run(site: &SiteCfg) -> color_eyre::Result<()> {
 }
 
 async fn real_main() -> color_eyre::Result<()> {
-    color_eyre::install()?;
-    tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-        .init();
     for site in SUPPORTED_SITES {
         run(site).await?;
     }
@@ -309,6 +305,10 @@ async fn real_main() -> color_eyre::Result<()> {
 }
 
 fn main() -> color_eyre::Result<()> {
+    color_eyre::install()?;
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .init();
     tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()?
