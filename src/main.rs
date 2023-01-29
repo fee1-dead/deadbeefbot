@@ -143,7 +143,7 @@ async fn run(site: &SiteCfg) -> color_eyre::Result<()> {
         ),
         generator: Some(QueryGenerator::Search(SearchGenerator {
             search: SEARCH.into(),
-            namespace: "0".into(),
+            namespace: Some("0".into()),
             limit: Limit::Value(20), // content too big
             offset: None,
             info: SearchInfo::empty(),
