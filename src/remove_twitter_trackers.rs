@@ -15,7 +15,9 @@ use wiki::api::QueryResponse;
 use wiki::req::search::{SearchGenerator, SearchInfo, SearchProp};
 use wiki::req::{Limit, PageSpec};
 
-use crate::{parsoid_from_url, search_with_rev_ids, site_from_url, SearchResponseBody, check_nobots};
+use crate::{
+    check_nobots, parsoid_from_url, search_with_rev_ids, site_from_url, SearchResponseBody,
+};
 
 pub async fn main() -> color_eyre::Result<()> {
     for site in SUPPORTED_SITES {
