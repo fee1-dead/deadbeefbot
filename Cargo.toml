@@ -8,7 +8,7 @@ edition = "2021"
 [dependencies]
 color-eyre = "0.6.2"
 wiki = { git = "https://github.com/fee1-dead/wiki" }
-parsoid = "0.7.4"
+parsoid = "0.8.0-alpha.3"
 serde = { version = "1.0.152", features = ["derive"] }
 tokio = { version = "1.23.0", features = ["full"] }
 futures-util = "0.3.25"
@@ -21,3 +21,4 @@ kuchiki = "0.8.1"
 tracing = "0.1.37"
 tracing-subscriber = { version = "0.3.16", features = ["env-filter"] }
 chrono = "0.4.23"
+rand = "0.8.5"

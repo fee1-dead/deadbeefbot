@@ -686,6 +686,7 @@ dependencies = [
  "futures-util",
  "kuchiki",
  "parsoid",
+ "rand 0.8.5",
  "reqwest",
  "serde",
  "serde_json",
@@ -1413,9 +1414,9 @@ dependencies = [
 
 [[package]]
 name = "mwapi_errors"
-version = "0.2.2"
+version = "0.3.0-alpha.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ddb58137e2ef000cdec38604cc738c925b1b6506fde54f3356d1cc9ad1e2d1eb"
+checksum = "8e0ed2f5fb2e89d62ca22a50c1d1af5fa6bc0c9507dc554fb1585165e51cec50"
 dependencies = [
  "reqwest",
  "serde",
@@ -1602,9 +1603,9 @@ dependencies = [
 
 [[package]]
 name = "parsoid"
-version = "0.7.5"
+version = "0.8.0-alpha.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6920331ced1f1f876212c5467ce308237aa5e045fdfd505c9f538d6c56805b1c"
+checksum = "8dcc9c598566a50201b6f171dacf8c441e60d3af8a7c803ec67e852e8ccc7d4b"
 dependencies = [
  "indexmap",
  "kuchiki",

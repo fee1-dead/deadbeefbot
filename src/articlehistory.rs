@@ -1,16 +1,16 @@
 //! Merge `{{On this day}}` templates into `{{article history}}` if exists.
 
 use std::collections::HashMap;
-use std::ops::ControlFlow;
+use std::fs;
 
-use futures_util::TryStreamExt;
-use parsoid::{Template, WikiMultinode, WikinodeIterator};
-use tracing::{info, warn};
-use wiki::req::search::{SearchGenerator, SearchInfo, SearchProp};
-use wiki::req::{Limit, PageSpec};
+use parsoid::{WikiMultinode, WikinodeIterator};
+use rand::seq::SliceRandom;
+use tracing::{debug, info};
+use wiki::req::PageSpec;
 
+use crate::articlehistory::extract::{extract_dyk, extract_itn, extract_otd};
 use crate::{
-    check_nobots, enwiki_bot, enwiki_parsoid, search_with_rev_ids, Result, SearchResponseBody,
+    check_nobots, enwiki_bot, enwiki_parsoid, Result
 };
 
 /// taken from [here](https://en.wikipedia.org/wiki/Special:WhatLinksHere?target=Template%3AArticle+history&namespace=&hidetrans=1&hidelinks=1).
@@ -38,165 +38,211 @@ const DYK: &[&str] = &["dyktalk", "dyk talk"];
 /// https://en.wikipedia.org/wiki/Special:WhatLinksHere?target=Template%3AITN+talk&namespace=&hidetrans=1&hidelinks=1
 const ITN: &[&str] = &["itn talk", "itntalk"];
 
-fn has_any_params(t: &Template, p: &[&str]) -> bool {
-    p.iter().any(|x| t.param(x).is_some())
+pub struct Parameter {
+    pub index: usize,
+    pub ty: ParameterType,
 }
 
-fn treat_otd(t: &Template, article_history: &Template) -> Result<ControlFlow<()>> {
-    #[derive(Default, PartialEq, Eq, PartialOrd, Ord)]
-    pub struct Otd {
-        date: Option<String>,
-        oldid: Option<String>,
-    }
-
-    if has_any_params(article_history, &["otddate", "otdoldid", "otdlink"]) {
-        warn!("has OTD already");
-        return Ok(ControlFlow::Break(()));
-    }
-
-    let mut map: HashMap<u32, Otd> = HashMap::new();
-    for (param, value) in t.params() {
-        if let Some(num) = param.strip_prefix("date") {
-            map.entry(num.parse()?).or_default().date = Some(value);
-        } else if let Some(num) = param.strip_prefix("oldid") {
-            map.entry(num.parse()?).or_default().oldid = Some(value);
-        } else {
-            warn!(?param, "unrecognized parameter");
-            return Ok(ControlFlow::Break(()));
-        }
-    }
-    let mut v: Vec<(u32, Otd)> = map.into_iter().collect();
-    v.sort_unstable();
-
-    for (n, Otd { date, oldid }) in v {
-        let (Some(date), Some(oldid)) = (date, oldid) else {
-            warn!(?n, "does not have both date and oldid, refusing to edit");
-            return Ok(ControlFlow::Break(()));
+impl Parameter {
+    pub fn print_into(self, v: &mut Vec<(String, String)>) {
+        let prefix = match self.ty {
+            ParameterType::Itn { .. } => "itn",
+            ParameterType::Dyk { .. } => "dyk",
+            ParameterType::Otd { .. } => "otd",
         };
 
-        let datename = format!("otd{n}date");
-        let oldidname = format!("otd{n}oldid");
+        let prefix = format!("{prefix}{}", self.index);
 
-        if has_any_params(article_history, &[&datename, &oldidname]) {
-            warn!("article history already has OTD param, not overwriting");
-            return Ok(ControlFlow::Break(()));
+        macro_rules! print {
+            ($value:expr) => {
+                if let Some(x) = $value {
+                    v.push((format!("{prefix}{}", stringify!($value)), x));
+                }
+            };
         }
 
-        article_history.set_param(&datename, &date)?;
-        article_history.set_param(&oldidname, &oldid)?;
-    }
-
-    // remove the OTD template.
-    t.detach();
-
-    Ok(ControlFlow::Continue(()))
-}
-
-fn treat_dyk(t: &Template, article_history: &Template) -> Result<ControlFlow<()>> {
-    let mut date = None;
-    let mut hook = None;
-    let mut nompage = None;
-    for (name, val) in t.params() {
-        match &*name {
-            "1" => date = Some(val),
-            "2" | "entry" => hook = Some(val),
-            "nompage" => nompage = Some(val),
-            // ignored parameters
-            "views" | "article" | "small" | "3" | "image" => {}
-            _ => {
-                warn!(?name, "unrecognized parameter");
-                return Ok(ControlFlow::Break(()));
+        match self.ty {
+            ParameterType::Itn { date, link } => {
+                print!(date);
+                print!(link);
+            }
+            ParameterType::Dyk { date, entry, nom } => {
+                print!(date);
+                print!(entry);
+                print!(nom);
+            }
+            ParameterType::Otd { date, oldid, link } => {
+                print!(date);
+                print!(oldid);
+                print!(link);
             }
         }
+
+        v.last_mut()
+            .unwrap()
+            .1
+            .push_str("{{subst:User:0xDeadbeef/newline}}");
     }
-
-    let Some(date) = date else {
-        warn!("no date provided");
-        return Ok(ControlFlow::Continue(()))
-    };
-
-    if has_any_params(article_history, &["dykdate", "dykentry", "dyknom"]) {
-        warn!("already has dyk template");
-        return Ok(ControlFlow::Continue(()));
-    }
-
-    article_history.set_param("dykdate", &date)?;
-
-    if let Some(entry) = hook {
-        article_history.set_param("dykentry", &entry)?;
-    }
-
-    if let Some(nom) = nompage {
-        article_history.set_param("dyknom", &nom)?;
-    }
-
-    t.detach();
-    Ok(ControlFlow::Continue(()))
 }
 
-fn treat_itn(t: &Template, article_history: &Template) -> Result<ControlFlow<()>> {
-    #[derive(Default, PartialEq, Eq, PartialOrd, Ord)]
-    pub struct Itn {
+#[derive(PartialEq, Eq, PartialOrd, Ord, Debug)]
+pub enum ParameterType {
+    Itn {
+        date: Option<String>,
+        link: Option<String>,
+    },
+    Dyk {
+        date: Option<String>,
+        entry: Option<String>,
+        nom: Option<String>,
+    },
+    Otd {
         date: Option<String>,
         oldid: Option<String>,
-    }
+        link: Option<String>,
+    },
+}
 
-    if has_any_params(article_history, &["itndate", "itnlink"]) {
-        warn!("has ITN already");
-        return Ok(ControlFlow::Break(()));
-    }
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Ty {
+    Itn,
+    Dyk,
+    Otd,
+}
 
-    let mut map: HashMap<u32, Itn> = HashMap::new();
-    for (param, value) in t.params() {
-        if let Some(num) = param.strip_prefix("date") {
-            map.entry(if num.is_empty() { 1 } else { num.parse()? })
-                .or_default()
-                .date = Some(value);
-        } else if let Some(num) = param.strip_prefix("oldid") {
-            map.entry(if num.is_empty() { 1 } else { num.parse()? })
-                .or_default()
-                .oldid = Some(value);
-        } else {
-            warn!(?param, "unrecognized parameter");
-            return Ok(ControlFlow::Break(()));
+mod extract;
+
+pub struct Info {
+    start_index: Option<usize>,
+    others: Vec<(String, String)>,
+    params: HashMap<(Ty, usize), Parameter>,
+}
+
+pub async fn treat(client: &wiki::Bot, parsoid: &parsoid::Client, title: &str) -> Result<()> {
+    info!("Treating [[{}]]", title);
+
+    let wikicode = parsoid.get(title).await?.into_mutable();
+    let rev = wikicode.revision_id().unwrap();
+    let templates = wikicode.filter_templates()?;
+    let Some(article_history) = templates
+        .iter()
+        .find(|x| AH.contains(&&*x.name().trim_start_matches("Template:").to_ascii_lowercase()))
+    else {
+        return Ok(())
+    };
+
+    let Some(Info {
+        start_index, mut others, params
+    }) = extract::extract_info(article_history)? else {
+        return Ok(())
+    };
+
+    let mut params: Vec<_> = params.into_values().map(|p| p.ty).collect();
+
+    for template in &templates {
+        if check_nobots(template) {
+            return Ok(())
+        }
+
+        let template_name = template
+            .name()
+            .trim_start_matches("Template:")
+            .to_ascii_lowercase();
+
+        if OTD.contains(&&*template_name) {
+            template.detach();
+            let Some(mut x) = extract_otd(template)? else { return Ok(()) };
+            debug!(?x);
+            params.append(&mut x)
+        } else if DYK.contains(&&*template_name) {
+            template.detach();
+            let Some(x) = extract_dyk(template)? else { return Ok(()) };
+            params.push(x)
+        } else if ITN.contains(&&*template_name) {
+            template.detach();
+            let Some(mut x) = extract_itn(template)? else { return Ok(()) };
+            params.append(&mut x)
         }
     }
-    let mut v: Vec<(u32, Itn)> = map.into_iter().collect();
-    v.sort_unstable();
 
-    for (n, Itn { date, oldid }) in v {
-        let Some(date) = date else {
-            warn!(?n, "does not have date, refusing to edit");
-            return Ok(ControlFlow::Break(()));
+    // sort parameters.
+    params.sort_unstable();
+
+    let mut to_insert = Vec::with_capacity(params.len());
+
+    debug!(?params);
+
+    let mut dykcount = 0;
+    let mut otdcount = 0;
+    let mut itncount = 0;
+
+    // convert parameters to final form.
+    for param in params {
+        let index = match param {
+            ParameterType::Dyk { .. } => {
+                dykcount += 1;
+                dykcount
+            }
+            ParameterType::Otd { .. } => {
+                otdcount += 1;
+                otdcount
+            }
+            ParameterType::Itn { .. } => {
+                itncount += 1;
+                itncount
+            }
         };
 
-        let datename = format!("itn{n}date");
-        let linkname = format!("itn{n}link");
-
-        if has_any_params(article_history, &[&datename, &linkname]) {
-            warn!("article history already has ITN param, not overwriting");
-            return Ok(ControlFlow::Break(()));
-        }
-
-        article_history.set_param(&datename, &date)?;
-
-        if let Some(oldid) = oldid {
-            article_history.set_param(&linkname, &format!("https://en.wikipedia.org/w/index.php?title=Template:In_the_news&oldid={oldid}"))?;
-        }
+        Parameter { index, ty: param }.print_into(&mut to_insert);
     }
 
-    // remove the itn template.
-    t.detach();
+    let index = start_index.unwrap_or_else(|| others.len());
+    let others_last = others.split_off(index);
+    /*if let Some((_, b)) = others.last_mut() {
+        b.push_str("{{subst:User:0xDeadbeef/newline}}")
+    }*/
+    others.extend(to_insert);
+    others.extend(others_last);
 
-    Ok(ControlFlow::Continue(()))
+    let params = others;
+    article_history.set_params(params.into_iter().collect())?;
+
+    // we are done with modifying wikicode.
+    let text = parsoid.transform_to_wikitext(&wikicode).await?;
+
+    client
+                    .build_edit(PageSpec::Title(title.to_owned()))
+                    .text(text)
+                    .summary("merged OTD/ITN/DYK templates to {{article history}} ([[Wikipedia:Bots/Requests for approval/DeadbeefBot 2|BRFA]]) (trial)")
+                    .baserevid(rev as u32)
+                    .minor()
+                    .bot()
+                    .send()
+                    .await?;
+
+    Ok(())
 }
 
 pub async fn main() -> Result<()> {
     let client = enwiki_bot().await?;
+    // let client = enwiki_bot().await?;
     let parsoid = enwiki_parsoid()?;
-    let pages = search_with_rev_ids(
+
+
+    let x = fs::read_to_string("./scan.txt")?;
+    let pages: Vec<_> = x.lines().collect();
+    
+    // randomly take 49 pages
+    let pages: Vec<_> = pages.choose_multiple(&mut rand::thread_rng(), 1).collect();
+
+    for page in pages {
+        treat(&client, &parsoid, page).await?;
+    }
+    // let parsoid = enwiki_parsoid()?;
+    /*let pages = search_with_rev_ids(
         &client,
         SearchGenerator {
+            // TODO also ITN and DYK
             search: r#"hastemplate:"On this day" hastemplate:"Article history""#.into(),
             limit: Limit::Value(100),
             offset: None,
@@ -207,81 +253,8 @@ pub async fn main() -> Result<()> {
     );
 
     pages
-        .try_for_each(|x: SearchResponseBody| async {
-            'treat: for mut page in x.pages {
-                info!("Treating [[{}]]", page.title);
-                let rev = page.revisions.pop().unwrap();
-                let wikicode = parsoid
-                    .get_revision(&page.title, rev.revid.into())
-                    .await?
-                    .into_mutable();
-                let templates = wikicode.filter_templates()?;
-                let Some(article_history) = templates
-                    .iter()
-                    .find(|x| AH.contains(&&*x.name().trim_start_matches("Template:").to_ascii_lowercase()))
-                else {
-                    continue 'treat;
-                };
-
-                let mut foundotd = false;
-                let mut founddyk = false;
-                let mut founditn = false;
-                for template in &templates {
-                    if check_nobots(template) {
-                        continue 'treat;
-                    }
-
-                    let template_name = template.name().trim_start_matches("Template:").to_ascii_lowercase();
-
-                    if OTD.contains(&&*template_name) {
-                        if foundotd {
-                            warn!("Got TWO on this day templates on the page, confused bot will refuse to edit");
-                            continue 'treat;
-                        }
-                        foundotd = true;
-
-                        if treat_otd(template, article_history)?.is_break() {
-                            continue 'treat;
-                        }
-                    }
-
-                    if DYK.contains(&&*template_name) {
-                        if founddyk {
-                            warn!("Got TWO DYK templates on the page, confused bot will refuse to edit");
-                            continue 'treat;
-                        }
-                        founddyk = true;
-
-                        if treat_dyk(template, article_history)?.is_break() {
-                            continue 'treat;
-                        }
-                    }
-
-                    if ITN.contains(&&*template_name) {
-                        if founditn {
-                            warn!("Got TWO ITN templates on the page, confused bot will refuse to edit");
-                            continue 'treat;
-                        }
-                        founditn = true;
-
-                        if treat_itn(template, article_history)?.is_break() {
-                            continue 'treat;
-                        }
-                    }
-                }
-
-                // we are done with modifying wikicode.
-                let text = parsoid.transform_to_wikitext(&wikicode).await?;
-                client
-                    .build_edit(PageSpec::PageId(page.pageid))
-                    .text(text)
-                    .summary("merged {{on this day}} template to {{article history}}.")
-                    .baserevid(rev.revid)
-                    .minor()
-                    .bot()
-                    .send()
-                    .await?;
-
+        .try_for_each(|x: QueryResponse<SearchResponseBody>| async {
+            'treat: for mut page in x.query.pages {
                 // TODO remove this
                 tokio::time::sleep(std::time::Duration::from_secs(5)).await;
             }
@@ -289,6 +262,6 @@ pub async fn main() -> Result<()> {
             Ok(())
         })
         .await?;
-
+*/
     Ok(())
 }

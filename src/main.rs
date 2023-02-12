@@ -1,3 +1,4 @@
+#![feature(array_try_map)]
 use std::fs;
 
 use color_eyre::eyre::Context;
