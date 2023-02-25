@@ -131,6 +131,8 @@ pub async fn treat(client: &wiki::Bot, parsoid: &parsoid::Client, title: &str) -
         return Ok(())
     };
 
+    article_history.set_name("Article history".to_owned())?;
+
     let Some(Info {
         start_index, mut others, params
     }) = extract::extract_info(article_history)? else {
