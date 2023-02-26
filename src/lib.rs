@@ -1,8 +1,7 @@
-#![feature(array_try_map)]
 use std::fs;
 
 use color_eyre::eyre::Context;
-use futures_util::{Stream, TryStreamExt};
+use futures_util::{Stream, TryStreamExt, Future};
 use parsoid::Template;
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
@@ -58,12 +57,6 @@ pub fn search_with_rev_ids<T: DeserializeOwned>(
         .and_then(|x| async { Ok(serde_json::from_value(x)?) })
 }
 
-async fn real_main() -> Result<()> {
-    //remove_twitter_trackers::main().await?;
-    articlehistory::main().await?;
-    Ok(())
-}
-
 pub async fn enwiki_bot() -> Result<wiki::Bot> {
     site_from_url("https://en.wikipedia.org/w/api.php").await
 }
@@ -98,7 +91,7 @@ pub fn check_nobots(t: &Template) -> bool {
                 || t.param("deny").map_or(false, |x| x.contains("DeadbeefBot"))))
 }
 
-fn main() -> color_eyre::Result<()> {
+pub fn setup<F: Future<Output = color_eyre::Result<()>>>(x: impl FnOnce() -> F) -> color_eyre::Result<()> {
     color_eyre::install()?;
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
@@ -106,5 +99,5 @@ fn main() -> color_eyre::Result<()> {
     tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()?
-        .block_on(real_main())
+        .block_on(x())
 }
