@@ -215,7 +215,7 @@ pub async fn treat(client: &wiki::Bot, parsoid: &parsoid::Client, title: &str) -
     client
                     .build_edit(PageSpec::Title(title.to_owned()))
                     .text(text)
-                    .summary("merged OTD/ITN/DYK templates to {{article history}} ([[Wikipedia:Bots/Requests for approval/DeadbeefBot 2|BRFA]]) (trial)")
+                    .summary("merged OTD/ITN/DYK templates to {{article history}} ([[Wikipedia:Bots/Requests for approval/DeadbeefBot 2|BRFA]])")
                     .baserevid(rev as u32)
                     .minor()
                     .bot()
@@ -226,44 +226,16 @@ pub async fn treat(client: &wiki::Bot, parsoid: &parsoid::Client, title: &str) -
 }
 
 pub async fn main() -> Result<()> {
+    let pages = reqwest::get("https://petscan.wmflabs.org/?psid=23807355&format=plain").await?.text().await?;
+    let pages: Vec<_> = pages.lines().collect();
+
     let client = enwiki_bot().await?;
     // let client = enwiki_bot().await?;
     let parsoid = enwiki_parsoid()?;
-
-
-    let x = fs::read_to_string("./scan.txt")?;
-    let pages: Vec<_> = x.lines().collect();
     
-    // randomly take 49 pages
-    let pages: Vec<_> = pages.choose_multiple(&mut rand::thread_rng(), 1).collect();
-
     for page in pages {
         treat(&client, &parsoid, page).await?;
     }
-    // let parsoid = enwiki_parsoid()?;
-    /*let pages = search_with_rev_ids(
-        &client,
-        SearchGenerator {
-            // TODO also ITN and DYK
-            search: r#"hastemplate:"On this day" hastemplate:"Article history""#.into(),
-            limit: Limit::Value(100),
-            offset: None,
-            prop: SearchProp::empty(),
-            info: SearchInfo::empty(),
-            namespace: Some("1".into()),
-        },
-    );
 
-    pages
-        .try_for_each(|x: QueryResponse<SearchResponseBody>| async {
-            'treat: for mut page in x.query.pages {
-                // TODO remove this
-                tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-            }
-
-            Ok(())
-        })
-        .await?;
-*/
     Ok(())
 }
