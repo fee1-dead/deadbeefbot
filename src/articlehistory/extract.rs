@@ -82,6 +82,10 @@ pub fn extract_info(article_history: &Template) -> Result<Option<Info>> {
                             }
                         }
                     )*
+                    /* x => {
+                        warn!(?x, "you are not supposed to be here");
+                        return Ok(None);
+                    } */
                 }
             };
         }
@@ -111,7 +115,10 @@ pub fn extract_info(article_history: &Template) -> Result<Option<Info>> {
     }))
 }
 
-pub fn extract_dyk(t: &Template) -> Result<Option<ParameterType>> {
+pub type ExtractResultMulti = Result<Option<Vec<ParameterType>>>;
+pub type ExtractResultSingle = Result<Option<ParameterType>>;
+
+pub fn extract_dyk(t: &Template) -> ExtractResultSingle {
     let mut date = None;
     let mut year = None;
     let mut entry = None;
@@ -142,7 +149,7 @@ pub fn extract_dyk(t: &Template) -> Result<Option<ParameterType>> {
     Ok(Some(ParameterType::Dyk { date, entry, nom }))
 }
 
-pub fn extract_otd(t: &Template) -> Result<Option<Vec<ParameterType>>> {
+pub fn extract_otd(t: &Template) -> ExtractResultMulti {
     #[derive(Default)]
     pub struct Otd {
         date: Option<String>,
@@ -170,7 +177,7 @@ pub fn extract_otd(t: &Template) -> Result<Option<Vec<ParameterType>>> {
     ))
 }
 
-pub fn extract_itn(t: &Template) -> Result<Option<Vec<ParameterType>>> {
+pub fn extract_itn(t: &Template) -> ExtractResultMulti {
     #[derive(Default, PartialEq, Eq, PartialOrd, Ord)]
     pub struct Itn {
         date: Option<String>,
@@ -210,4 +217,27 @@ pub fn extract_itn(t: &Template) -> Result<Option<Vec<ParameterType>>> {
             .map(|Itn { date }| ParameterType::Itn { date, link: None })
             .collect(),
     ))
+}
+
+pub fn extract_failed_ga(t: &Template) -> ExtractResultSingle {
+    let mut date = None;
+    let mut oldid = None;
+    let mut page = None;
+    let mut topic = None;
+    for (param, value) in t.params() {
+        match &*param {
+            "1" | "date" => date = Some(value),
+            "topic" => topic = Some(value),
+            "page" => page = Some(value),
+            "oldid" => oldid = Some(value),
+            // Ignore
+            "small" => {}
+            _ => {
+                warn!(?param, "unrecognized parameter");
+                return Ok(None);
+            }
+        }
+    }
+
+    todo!()
 }
