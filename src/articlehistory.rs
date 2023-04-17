@@ -2,8 +2,9 @@
 
 use std::collections::HashMap;
 
+use chrono::{DateTime, Utc};
 use parsoid::map::IndexMap;
-use parsoid::{WikiMultinode, WikinodeIterator};
+use parsoid::{WikiMultinode, WikinodeIterator, Template};
 use tracing::{debug, info};
 use wiki::req::PageSpec;
 
@@ -37,6 +38,85 @@ const DYK: &[&str] = &["dyktalk", "dyk talk"];
 
 /// https://en.wikipedia.org/wiki/Special:WhatLinksHere?target=Template%3AITN+talk&namespace=&hidetrans=1&hidelinks=1
 const ITN: &[&str] = &["itn talk", "itntalk"];
+
+#[derive(Clone)]
+pub struct PreserveDate {
+    pub date: DateTime<Utc>,
+    pub orig: String,
+}
+
+impl PartialEq for PreserveDate {
+    fn eq(&self, other: &Self) -> bool {
+        self.date == other.date
+    }
+}
+
+impl Eq for PreserveDate {}
+
+impl PartialOrd for PreserveDate {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.date.cmp(&other.date))
+    }
+}
+
+impl Ord for PreserveDate {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.date.cmp(&other.date)
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum ActionKind {
+    Fac,
+    Far,
+    Rbp,
+    Bp,
+    Flc,
+    Flr,
+    Ftc,
+    Ftr,
+    Fproc,
+    Fpor,
+    Gan,
+    Gar,
+    Gtc,
+    Pr,
+    Wpr,
+    War,
+    Afd,
+    Mfd,
+    Tfd,
+    Csd,
+    Prod,
+    Drv,
+}
+
+pub struct Action {
+    pub kind: ActionKind,
+    pub date: PreserveDate,
+    pub link: Option<String>,
+    pub result: Option<String>,
+    pub oldid: Option<String>,
+}
+
+pub struct ArticleHistory {
+    pub actions: Vec<Action>,
+    pub collapse: Option<bool>,
+}
+
+impl ArticleHistory {
+    pub fn sort(&mut self) {
+        self.actions.sort_by_key(|action| action.date.date)
+    }
+
+    pub fn into_template(mut self, t: &mut Template) {
+        self.sort();
+        t.set_name("Article history{{subst:User:0xDeadbeef/newline}}".into());
+
+        t.set_params([]);
+
+    }
+}
 
 pub struct Parameter {
     pub index: usize,
@@ -105,7 +185,13 @@ pub enum ParameterType {
         date: Option<String>,
         oldid: Option<String>,
         link: Option<String>,
-    },
+    },/*
+    FailedGa {
+        date: Option<String>,
+        oldid: Option<String>,
+        page: Option<String>,
+        topic: Option<String>,
+    },*/
 }
 
 impl ParameterType {
