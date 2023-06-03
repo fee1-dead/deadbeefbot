@@ -1,118 +1,109 @@
 use std::collections::HashMap;
+use std::iter;
 
 use crate::articlehistory::ParameterType;
 
-use super::{Info, Parameter, Result, Ty};
+use super::{ArticleHistory, Info, Parameter, Result, Ty, PreserveDate};
 use parsoid::Template;
 
+use serde::Deserialize;
+use serde_json::{Map, Value};
 use tracing::warn;
 
 /// first extract useful information from article history.
-pub fn extract_info(article_history: &Template) -> Result<Option<Info>> {
-    // extract all useable otd, dyk and itn params from the map. To not be disruptive, we record the last index of each parameter.
+pub fn extract_info(article_history: &Template) -> Result<Option<ArticleHistory>> {
     let all_params = article_history.params();
 
-    let interesting =
-        |n: &str| n.starts_with("otd") || n.starts_with("itn") || n.starts_with("dyk");
+    println!("{all_params:?}");
 
-    // the FIRST index of an otd/itn/dyk template. This is usually at the end of a
-    // template, but to not be disruptive when removing and reinserting the parameters,
-    // we keep the first index to reinsert later.
-    let start_index = all_params.iter().position(|(name, _)| interesting(name));
+    let mut map = Map::new();
+    let mut actions: HashMap<usize, HashMap<_, _>> = HashMap::new();
+    let mut featured_topics: HashMap<usize, HashMap<_, _>> = HashMap::new();
+    let mut dyk: HashMap<usize, HashMap<_, _>> = HashMap::new();
+    let mut otd: HashMap<usize, HashMap<_, _>> = HashMap::new();
+    let mut itn: HashMap<usize, HashMap<_, _>> = HashMap::new();
 
-    // split the params into otd/itn/dyk and those that are not.
-    let (filtered, others): (Vec<_>, Vec<_>) = all_params
-        .into_iter()
-        .partition(|(name, _)| interesting(name));
+    for (name, param) in all_params.iter() {
+        macro_rules! maybe_number_and_key {
+            ($name:literal, $map: ident) => {{
+                let name = &name[$name.len()..];
+                let num_end = name
+                    .chars()
+                    .position(|x| !x.is_ascii_digit())
+                    .unwrap_or(name.len());
 
-    let mut params: HashMap<(Ty, usize), Parameter> = HashMap::new();
+                let num = if num_end == 0 {
+                    0
+                } else {
+                    let Ok(num) = name[..num_end].parse::<usize>() else {
+                                        warn!("failed to parse {} number: {name}", $name);
+                                        return Ok(None);
+                                    };
+                    num
+                };
 
-    for (name, value) in filtered {
-        let param = &name[3..];
-        let (pos, _) = param
-            .char_indices()
-            .find(|(_, c)| !c.is_ascii_digit())
-            .unwrap();
-        let (num, param) = param.split_at(pos);
-        let num = if num.is_empty() { 1 } else { num.parse()? };
-        let key = &name[0..3];
-        let (key, mk): (_, fn() -> ParameterType) = match key {
-            "itn" => (Ty::Itn, || ParameterType::Itn {
-                date: None,
-                link: None,
-            }),
-            "dyk" => (Ty::Dyk, || ParameterType::Dyk {
-                date: None,
-                entry: None,
-                nom: None,
-            }),
-            "otd" => (Ty::Otd, || ParameterType::Otd {
-                date: None,
-                oldid: None,
-                link: None,
-            }),
-            _ => unreachable!(),
-        };
+                let key = &name[num_end..];
 
-        let p = params.entry((key, num)).or_insert_with(|| Parameter {
-            index: num,
-            ty: mk(),
-        });
-
-        macro_rules! generate_match {
-            ($(
-                $name:ident {
-                    $($field:ident: Option<String>),*$(,)?
+                if $map.entry(num).or_default().insert(key, param).is_some() {
+                    warn!("duplicate {}: {num} {key}", $name);
+                    return Ok(None);
                 }
-            ),*$(,)?) => {
-                match &mut p.ty {
-                    $(
-                        ParameterType::$name { $($field,)* } => match param {
-                            $(stringify!($field) => {
-                                if $field.is_some() {
-                                    warn!("parameter override: {}", stringify!($field));
-                                    return Ok(None);
-                                }
-
-                                *$field = Some(value);
-                            })*
-                            x => {
-                                warn!(?x, "unrecognized parameter");
-                                return Ok(None);
-                            }
-                        }
-                    )*
-                    /* x => {
-                        warn!(?x, "you are not supposed to be here");
-                        return Ok(None);
-                    } */
-                }
-            };
+            }};
         }
-
-        generate_match! {
-            Itn {
-                date: Option<String>,
-                link: Option<String>,
-            },
-            Dyk {
-                date: Option<String>,
-                entry: Option<String>,
-                nom: Option<String>,
-            },
-            Otd {
-                date: Option<String>,
-                oldid: Option<String>,
-                link: Option<String>,
-            },
+        if name.starts_with("action") {
+            maybe_number_and_key!("action", actions);
+        } else if name.starts_with("ft") {
+            maybe_number_and_key!("ft", featured_topics);
+        } else if name.starts_with("dyk") {
+            maybe_number_and_key!("dyk", dyk);
+        } else if name.starts_with("otd") {
+            maybe_number_and_key!("otd", otd);
+        } else if name.starts_with("itn") {
+            maybe_number_and_key!("itn", itn);
+        } else {
+            map.insert(name.clone(), param.clone().into());
         }
     }
 
-    Ok(Some(Info {
-        start_index,
-        others,
-        params,
-    }))
+    for (mut values, key, start) in [
+        (actions, "actions", 1),
+        (featured_topics, "featured_topics", 0),
+        (dyk, "dyks", 0),
+        (otd, "otds", 0),
+        (itn, "itns", 0),
+    ] {
+        let values = (1..).map_while(|mut idx| {
+            if idx == 1 && start == 0 {
+                idx = 0;
+            }
+            if let Some(x) = values.remove(&idx) {
+                let value: Map<_, _> = x
+                    .into_iter()
+                    .map(|(key, value)| (key.to_owned(), Value::String(value.clone())))
+                    .collect();
+                Some(value)
+            } else {
+                None
+            }
+        });
+
+        map.insert(
+            key.to_owned(),
+            Value::Array(values.map(Value::Object).collect()),
+        );
+    }
+
+    println!("{map:#?}");
+
+    let res = serde_json::from_value(Value::Object(map));
+
+    match res {
+        Ok(x) => Ok(Some(x)),
+        Err(e) => {
+            warn!("error when parsing article history template: {e}");
+            Ok(None)
+        }
+    }
 }
 
 pub type ExtractResultMulti = Result<Option<Vec<ParameterType>>>;
@@ -218,6 +209,8 @@ pub fn extract_itn(t: &Template) -> ExtractResultMulti {
             .collect(),
     ))
 }
+
+
 
 pub fn extract_failed_ga(t: &Template) -> ExtractResultSingle {
     let mut date = None;

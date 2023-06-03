@@ -5,9 +5,11 @@ use futures_util::{Future, Stream, TryStreamExt};
 use parsoid::Template;
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
-use wiki::builder::SiteBuilder;
 use wiki::req::search::SearchGenerator;
 use wiki::req::{self, Query, QueryGenerator};
+use wiki::{Bot, ClientBuilder};
+
+mod extractors;
 
 const UA: &str = concat!(
     "DeadbeefBot/",
@@ -62,7 +64,7 @@ pub async fn enwiki_bot() -> Result<wiki::Bot> {
 }
 
 pub async fn site_from_url(url: &str) -> Result<wiki::Bot> {
-    Ok(SiteBuilder::new(url)
+    Ok(ClientBuilder::new(url)
         .oauth(
             fs::read_to_string("./token.secret")
                 .context("please put oauth2 token in token.secret")?

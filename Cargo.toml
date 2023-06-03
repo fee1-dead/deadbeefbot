@@ -1,3 +1,6 @@
+[workspace]
+members = ["check"]
+
 [package]
 name = "deadbeefbot"
 version = "0.1.0"
@@ -23,3 +26,4 @@ tracing-subscriber = { version = "0.3.16", features = ["env-filter"] }
 chrono = "0.4.23"
 rand = "0.8.5"
 copypasta = "0.8.2"
+timelib = "0.1.1"
