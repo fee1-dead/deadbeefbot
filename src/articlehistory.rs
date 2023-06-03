@@ -2,9 +2,11 @@
 
 use std::collections::HashMap;
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, TimeZone, Utc};
 use parsoid::map::IndexMap;
-use parsoid::{WikiMultinode, WikinodeIterator, Template};
+use parsoid::{Template, WikiMultinode, WikinodeIterator};
+use serde::de::DeserializeOwned;
+use serde::Deserialize;
 use tracing::{debug, info};
 use wiki::req::PageSpec;
 
@@ -39,10 +41,24 @@ const DYK: &[&str] = &["dyktalk", "dyk talk"];
 /// https://en.wikipedia.org/wiki/Special:WhatLinksHere?target=Template%3AITN+talk&namespace=&hidetrans=1&hidelinks=1
 const ITN: &[&str] = &["itn talk", "itntalk"];
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct PreserveDate {
     pub date: DateTime<Utc>,
     pub orig: String,
+}
+
+impl<'de> Deserialize<'de> for PreserveDate {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        let date = timelib::strtotime(s.clone(), None, None).map_err(serde::de::Error::custom)?;
+        Ok(PreserveDate {
+            date: Utc.timestamp_opt(date, 0).unwrap(),
+            orig: s,
+        })
+    }
 }
 
 impl PartialEq for PreserveDate {
@@ -91,7 +107,46 @@ pub enum ActionKind {
     Drv,
 }
 
+impl<'de> Deserialize<'de> for ActionKind {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?.to_lowercase();
+        match &*s {
+            "fac" => Ok(ActionKind::Fac),
+            "far" => Ok(ActionKind::Far),
+            "rbp" => Ok(ActionKind::Rbp),
+            "bp" => Ok(ActionKind::Bp),
+            "flc" => Ok(ActionKind::Flc),
+            "flr" => Ok(ActionKind::Flr),
+            "ftc" => Ok(ActionKind::Ftc),
+            "ftr" => Ok(ActionKind::Ftr),
+            "fproc" => Ok(ActionKind::Fproc),
+            "fpor" => Ok(ActionKind::Fpor),
+            "gan" => Ok(ActionKind::Gan),
+            "gar" => Ok(ActionKind::Gar),
+            "gtc" => Ok(ActionKind::Gtc),
+            "pr" => Ok(ActionKind::Pr),
+            "wpr" => Ok(ActionKind::Wpr),
+            "war" => Ok(ActionKind::War),
+            "afd" => Ok(ActionKind::Afd),
+            "mfd" => Ok(ActionKind::Mfd),
+            "tfd" => Ok(ActionKind::Tfd),
+            "csd" => Ok(ActionKind::Csd),
+            "prod" => Ok(ActionKind::Prod),
+            "drv" => Ok(ActionKind::Drv),
+            _ => Err(serde::de::Error::custom(format!(
+                "unknown action kind: {}",
+                s
+            ))),
+        }
+    }
+}
+
+#[derive(Deserialize, Debug)]
 pub struct Action {
+    #[serde(rename = "")]
     pub kind: ActionKind,
     pub date: PreserveDate,
     pub link: Option<String>,
@@ -99,9 +154,58 @@ pub struct Action {
     pub oldid: Option<String>,
 }
 
+#[derive(Deserialize, Debug)]
+pub struct Dyk {
+    pub date: PreserveDate,
+    pub entry: Option<String>,
+    pub nom: Option<String>,
+    #[serde(default)]
+    pub ignoreerror: bool,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct Itn {
+    pub date: PreserveDate,
+    pub link: Option<String>,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct Otd {
+    pub date: PreserveDate,
+    pub oldid: Option<String>,
+    pub link: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct FeaturedTopic {
+    pub name: String,
+    #[serde(default)]
+    pub main: bool,
+}
+
+/// Rules:
+///  * It should reorder existing actions based on their dates.
+///  * it should compute the current status based on the latest action, and error if there is mismatch.
+///  * It should fold over actions from other templates, and make changes to current status if necessary.
+///
+#[derive(Deserialize, Debug)]
+#[serde(deny_unknown_fields)]
 pub struct ArticleHistory {
     pub actions: Vec<Action>,
-    pub collapse: Option<bool>,
+    #[serde(default)]
+    pub collapse: bool,
+    #[serde(default)]
+    pub small: bool,
+    pub currentstatus: Option<String>,
+    pub topic: Option<String>,
+    pub dyks: Vec<Dyk>,
+    pub itns: Vec<Itn>,
+    pub otds: Vec<Otd>,
+    pub featured_topics: Vec<FeaturedTopic>,
+    pub maindate: Option<PreserveDate>,
+    pub maindate2: Option<PreserveDate>,
+    #[serde(default)]
+    pub four: bool,
 }
 
 impl ArticleHistory {
@@ -109,12 +213,13 @@ impl ArticleHistory {
         self.actions.sort_by_key(|action| action.date.date)
     }
 
-    pub fn into_template(mut self, t: &mut Template) {
+    pub fn into_template(mut self, t: &mut Template) -> Result<()> {
         self.sort();
-        t.set_name("Article history{{subst:User:0xDeadbeef/newline}}".into());
+        t.set_name("Article history{{subst:User:0xDeadbeef/newline}}".into())?;
 
-        t.set_params([]);
+        t.set_params([])?;
 
+        Ok(())
     }
 }
 
@@ -185,13 +290,13 @@ pub enum ParameterType {
         date: Option<String>,
         oldid: Option<String>,
         link: Option<String>,
-    },/*
-    FailedGa {
-        date: Option<String>,
-        oldid: Option<String>,
-        page: Option<String>,
-        topic: Option<String>,
-    },*/
+    }, /*
+       FailedGa {
+           date: Option<String>,
+           oldid: Option<String>,
+           page: Option<String>,
+           topic: Option<String>,
+       },*/
 }
 
 impl ParameterType {
@@ -244,118 +349,127 @@ pub async fn treat(client: &wiki::Bot, parsoid: &parsoid::Client, title: &str) -
     };
 
     article_history.set_name("Article history{{subst:User:0xDeadbeef/newline}}".to_owned())?;
-
-    let Some(Info {
-        start_index, mut others, params
-    }) = extract::extract_info(article_history)? else {
-        return Ok(())
-    };
-
-    let mut params: Vec<_> = params
-        .into_values()
-        .map(|p| p.ty)
-        .filter(|x| !x.is_empty())
-        .collect();
+    let x = crate::articlehistory::extract::extract_info(article_history)?;
 
     for template in &templates {
         if check_nobots(template) {
             return Ok(());
         }
 
-        let template_name = template
-            .name()
-            .trim_start_matches("Template:")
-            .to_ascii_lowercase();
 
-        if OTD.contains(&&*template_name) {
-            template.detach();
-            let Some(mut x) = extract_otd(template)? else { return Ok(()) };
-            debug!(?x);
-            params.append(&mut x)
-        } else if DYK.contains(&&*template_name) {
-            template.detach();
-            let Some(x) = extract_dyk(template)? else { return Ok(()) };
-            params.push(x)
-        } else if ITN.contains(&&*template_name) {
-            template.detach();
-            let Some(mut x) = extract_itn(template)? else { return Ok(()) };
-            params.append(&mut x)
-        }
     }
-
-    // sort parameters.
-    params.sort_unstable();
-
-    let mut to_insert = Vec::with_capacity(params.len());
-
-    debug!(?params);
-
-    let mut dykcount = 0;
-    let mut otdcount = 0;
-    let mut itncount = 0;
-
-    // convert parameters to final form.
-    for param in params {
-        let index = match param {
-            ParameterType::Dyk { .. } => {
-                dykcount += 1;
-                dykcount
-            }
-            ParameterType::Otd { .. } => {
-                otdcount += 1;
-                otdcount
-            }
-            ParameterType::Itn { .. } => {
-                itncount += 1;
-                itncount
-            }
-        };
-
-        Parameter { index, ty: param }.print_into(&mut to_insert);
-    }
-
-    let index = start_index.unwrap_or_else(|| others.len());
-    let others_last = others.split_off(index);
-    /*if let Some((_, b)) = others.last_mut() {
-        b.push_str("{{subst:User:0xDeadbeef/newline}}")
-    }*/
-    others.extend(to_insert);
-    others.extend(others_last);
-
-    let params = others;
-    //    debug!(?params);
-    article_history.set_params(params.into_iter().collect::<IndexMap<_, _>>())?;
-
-    // we are done with modifying wikicode.
-    let text = parsoid.transform_to_wikitext(&wikicode).await?;
-
-    client
-                    .build_edit(PageSpec::Title(title.to_owned()))
-                    .text(text)
-                    .summary("merged OTD/ITN/DYK templates to {{article history}} ([[Wikipedia:Bots/Requests for approval/DeadbeefBot 2|BRFA]])")
-                    .baserevid(rev as u32)
-                    .minor()
-                    .bot()
-                    .send()
-                    .await?;
+    dbg!(x);
 
     Ok(())
+    /*
+        let Some(Info {
+            start_index, mut others, params
+        }) = extract::extract_info(article_history)? else {
+            return Ok(())
+        };
+
+        let mut params: Vec<_> = params.into_values().map(|p| p.ty).collect();
+
+        for template in &templates {
+            if check_nobots(template) {
+                return Ok(())
+            }
+
+            let template_name = template
+                .name()
+                .trim_start_matches("Template:")
+                .to_ascii_lowercase();
+
+            if OTD.contains(&&*template_name) {
+                template.detach();
+                let Some(mut x) = extract_otd(template)? else { return Ok(()) };
+                debug!(?x);
+                params.append(&mut x)
+            } else if DYK.contains(&&*template_name) {
+                template.detach();
+                let Some(x) = extract_dyk(template)? else { return Ok(()) };
+                params.push(x)
+            } else if ITN.contains(&&*template_name) {
+                template.detach();
+                let Some(mut x) = extract_itn(template)? else { return Ok(()) };
+                params.append(&mut x)
+            }
+        }
+
+        // sort parameters.
+        params.sort_unstable();
+
+        let mut to_insert = Vec::with_capacity(params.len());
+
+        debug!(?params);
+
+        let mut dykcount = 0;
+        let mut otdcount = 0;
+        let mut itncount = 0;
+
+        // convert parameters to final form.
+        for param in params {
+            let index = match param {
+                ParameterType::Dyk { .. } => {
+                    dykcount += 1;
+                    dykcount
+                }
+                ParameterType::Otd { .. } => {
+                    otdcount += 1;
+                    otdcount
+                }
+                ParameterType::Itn { .. } => {
+                    itncount += 1;
+                    itncount
+                }
+            };
+
+            Parameter { index, ty: param }.print_into(&mut to_insert);
+        }
+
+        let index = start_index.unwrap_or_else(|| others.len());
+        let others_last = others.split_off(index);
+        /*if let Some((_, b)) = others.last_mut() {
+            b.push_str("{{subst:User:0xDeadbeef/newline}}")
+        }*/
+        others.extend(to_insert);
+        others.extend(others_last);
+
+        let params = others;
+    //    debug!(?params);
+        article_history.set_params(params.into_iter().collect::<IndexMap<_, _>>())?;
+
+        // we are done with modifying wikicode.
+        let text = parsoid.transform_to_wikitext(&wikicode).await?;
+
+        client
+                        .build_edit(PageSpec::Title(title.to_owned()))
+                        .text(text)
+                        .summary("merged OTD/ITN/DYK templates to {{article history}} ([[Wikipedia:Bots/Requests for approval/DeadbeefBot 2|BRFA]])")
+                        .baserevid(rev as u32)
+                        .minor()
+                        .bot()
+                        .send()
+                        .await?;
+
+        Ok(())*/
 }
 
 pub async fn main() -> Result<()> {
-    let pages = reqwest::get("https://petscan.wmflabs.org/?psid=23807355&format=plain")
+    /*let pages = reqwest::get("https://petscan.wmflabs.org/?psid=24973575&format=plain")
         .await?
         .text()
         .await?;
-    let pages: Vec<_> = pages.lines().collect();
+    let pages: Vec<_> = pages.lines().collect();*/
+    let pages = vec!["Talk:Footastic"];
 
     debug!("got {} pages from petscan", pages.len());
 
-    // let client = site_from_url("https://test.wikipedia.org/w/api.php").await?;
-    let client = enwiki_bot().await?;
+    let client = site_from_url("https://test.wikipedia.org/w/api.php").await?;
+    // let client = enwiki_bot().await?;
 
-    // let parsoid = parsoid_from_url("https://test.wikipedia.org/api/rest_v1")?;
-    let parsoid = enwiki_parsoid()?;
+    let parsoid = parsoid_from_url("https://test.wikipedia.org/api/rest_v1")?;
+    // let parsoid = enwiki_parsoid()?;
 
     for page in pages {
         treat(&client, &parsoid, page).await?;
