@@ -108,6 +108,27 @@ pub enum ParameterType {
     },
 }
 
+impl ParameterType {
+    pub fn is_empty(&self) -> bool {
+        fn check(x: &Option<String>) -> bool {
+            x.as_deref().map(str::trim).map_or(true, str::is_empty)
+        }
+        match self {
+            Self::Itn { date, link } => check(date) && check(link),
+            Self::Dyk {
+                date: a,
+                entry: b,
+                nom: c,
+            }
+            | Self::Otd {
+                date: a,
+                oldid: b,
+                link: c,
+            } => check(a) && check(b) && check(c),
+        }
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Ty {
     Itn,
@@ -144,7 +165,11 @@ pub async fn treat(client: &wiki::Bot, parsoid: &parsoid::Client, title: &str) -
         return Ok(())
     };
 
-    let mut params: Vec<_> = params.into_values().map(|p| p.ty).collect();
+    let mut params: Vec<_> = params
+        .into_values()
+        .map(|p| p.ty)
+        .filter(|x| !x.is_empty())
+        .collect();
 
     for template in &templates {
         if check_nobots(template) {
