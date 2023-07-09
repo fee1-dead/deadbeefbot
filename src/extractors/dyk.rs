@@ -1,3 +1,6 @@
+use serde::Deserialize;
+
+use crate::articlehistory::{self as ah, ArticleHistory};
 use crate::articlehistory::PreserveDate;
 
 use super::{Extractor, ExtractContext};
@@ -5,6 +8,7 @@ use super::{Extractor, ExtractContext};
 
 pub struct DykExtractor;
 
+#[derive(Deserialize, Debug)]
 pub struct Dyk {
     pub date: PreserveDate,
     pub entry: Option<String>,
@@ -14,15 +18,10 @@ pub struct Dyk {
 impl Extractor for DykExtractor {
     type Value = Dyk;
 
-    fn is_extractable(&self, t: &parsoid::Template) -> bool {
-        todo!()
-    }
+    /// https://en.wikipedia.org/wiki/Special:WhatLinksHere?target=Template%3ADYK+talk&namespace=&hidetrans=1&hidelinks=1
+    const ALIAS: &'static [&'static str] = &["dyktalk", "dyk talk"];
 
-    fn extract(&self, t: &parsoid::Template) -> crate::Result<Self::Value> {
-        todo!()
-    }
-
-    fn merge_value_into<'cx>(&self, cx: ExtractContext<'cx>, value: Self::Value, into: &mut crate::articlehistory::ArticleHistory) {
-        todo!()
+    fn merge_value_into<'cx>(&self, _cx: ExtractContext<'cx>, value: Dyk, into: &mut ArticleHistory) {
+        into.dyks.push(ah::Dyk { date: value.date, entry: value.entry, nom: value.nom, ignoreerror: false });
     }
 }
