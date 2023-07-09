@@ -11,6 +11,7 @@ use tracing::{debug, info};
 use wiki::req::PageSpec;
 
 use crate::articlehistory::extract::{extract_dyk, extract_itn, extract_otd};
+use crate::extractors::ExtractContext;
 use crate::{check_nobots, enwiki_bot, enwiki_parsoid, Result};
 
 #[allow(unused_imports)]
@@ -35,8 +36,7 @@ const OTD: &[&str] = &[
     "onthisday",
 ];
 
-/// https://en.wikipedia.org/wiki/Special:WhatLinksHere?target=Template%3ADYK+talk&namespace=&hidetrans=1&hidelinks=1
-const DYK: &[&str] = &["dyktalk", "dyk talk"];
+
 
 /// https://en.wikipedia.org/wiki/Special:WhatLinksHere?target=Template%3AITN+talk&namespace=&hidetrans=1&hidelinks=1
 const ITN: &[&str] = &["itn talk", "itntalk"];
@@ -349,16 +349,23 @@ pub async fn treat(client: &wiki::Bot, parsoid: &parsoid::Client, title: &str) -
     };
 
     article_history.set_name("Article history{{subst:User:0xDeadbeef/newline}}".to_owned())?;
-    let x = crate::articlehistory::extract::extract_info(article_history)?;
+    let Some(mut ah) = crate::articlehistory::extract::extract_info(article_history)? else {
+        return Ok(())
+    };
+
+    let cx = ExtractContext { client, parsoid };
+
+    info!("Extracting [[{title}]], rev: {rev}, AH: {ah:#?}");
 
     for template in &templates {
         if check_nobots(template) {
             return Ok(());
         }
 
-
+        crate::extractors::extract_all(cx, template, &mut ah)?;
     }
-    dbg!(x);
+    
+    info!("extraction complete, AH: {ah:#?}");
 
     Ok(())
     /*

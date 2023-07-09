@@ -3,17 +3,16 @@ use crate::articlehistory::ArticleHistory;
 use parsoid::Template;
 use serde::de::DeserializeOwned;
 use serde_json::{Value, Map};
-use wiki::Client;
+use wiki::Bot;
 
 mod dyk;
 mod oldpr;
 
-
+#[derive(Clone, Copy, Debug)]
 pub struct ExtractContext<'cx> {
-    pub client: &'cx Client,
+    pub client: &'cx Bot,
     pub parsoid: &'cx parsoid::Client,
 }
-
 
 pub fn simple_extract<T: DeserializeOwned>(t: &Template) -> Result<T> {
     let x: Map<_, _>  = t.params().into_iter().map(|(a, b)| (a, Value::String(b))).collect();
@@ -25,13 +24,36 @@ pub fn template_name(t: &Template) -> String {
 }
 
 pub trait Extractor {
-    type Value;
+    type Value: DeserializeOwned;
+
+    const ALIAS: &'static [&'static str];
 
     /// A check for template name that this is extractable.
-    fn is_extractable(&self, t: &Template) -> bool;
+    fn is_extractable(&self, t: &Template) -> bool {
+        let name = template_name(t);
+        Self::ALIAS.iter().any(|x| x.eq_ignore_ascii_case(&name))
+    }
 
-    fn extract(&self, t: &Template) -> Result<Self::Value>;
+    fn extract(&self, t: &Template) -> Result<Self::Value> {
+        Ok(serde_json::from_value(simple_extract(t)?)?)
+    }
     fn merge_value_into<'cx>(&self, cx: ExtractContext<'cx>, value: Self::Value, into: &mut ArticleHistory);
+}
+
+pub fn extract_all<'cx>(cx: ExtractContext<'cx>, t: &Template, ah: &mut ArticleHistory) -> crate::Result<()> {
+    macro_rules! extract {
+        ($v:expr) => {
+            let e = $v;
+            if e.is_extractable(t) {
+                let val = e.extract(t)?;
+                e.merge_value_into(cx, val, ah);
+                return Ok(());
+            }
+        };
+    }
+    extract!(dyk::DykExtractor);
+    extract!(oldpr::OldPrExtractor);
+    Ok(())
 }
 
 
