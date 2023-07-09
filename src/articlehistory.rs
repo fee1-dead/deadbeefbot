@@ -2,17 +2,16 @@
 
 use std::collections::HashMap;
 
+use parsoid::map::IndexMap;
 use parsoid::{WikiMultinode, WikinodeIterator};
 use tracing::{debug, info};
 use wiki::req::PageSpec;
 
 use crate::articlehistory::extract::{extract_dyk, extract_itn, extract_otd};
-use crate::{
-    check_nobots, enwiki_bot, enwiki_parsoid, Result,
-};
+use crate::{check_nobots, enwiki_bot, enwiki_parsoid, Result};
 
 #[allow(unused_imports)]
-use crate::{site_from_url, parsoid_from_url};
+use crate::{parsoid_from_url, site_from_url};
 
 /// taken from [here](https://en.wikipedia.org/wiki/Special:WhatLinksHere?target=Template%3AArticle+history&namespace=&hidetrans=1&hidelinks=1).
 ///
@@ -59,7 +58,10 @@ impl Parameter {
                 if let Some(x) = $value {
                     // Parsoid doesn't change the parameter position if the parameter name isn't
                     // changed. We insert {{subst:null}} at the end to trick the parser.
-                    v.push((format!("{prefix}{}{{{{subst:null}}}}", stringify!($value)), x));
+                    v.push((
+                        format!("{prefix}{}{{{{subst:null}}}}", stringify!($value)),
+                        x,
+                    ));
                 }
             };
         }
@@ -146,7 +148,7 @@ pub async fn treat(client: &wiki::Bot, parsoid: &parsoid::Client, title: &str) -
 
     for template in &templates {
         if check_nobots(template) {
-            return Ok(())
+            return Ok(());
         }
 
         let template_name = template
@@ -210,8 +212,8 @@ pub async fn treat(client: &wiki::Bot, parsoid: &parsoid::Client, title: &str) -
     others.extend(others_last);
 
     let params = others;
-//    debug!(?params);
-    article_history.set_params(params.into_iter().collect())?;
+    //    debug!(?params);
+    article_history.set_params(params.into_iter().collect::<IndexMap<_, _>>())?;
 
     // we are done with modifying wikicode.
     let text = parsoid.transform_to_wikitext(&wikicode).await?;
@@ -230,7 +232,10 @@ pub async fn treat(client: &wiki::Bot, parsoid: &parsoid::Client, title: &str) -
 }
 
 pub async fn main() -> Result<()> {
-    let pages = reqwest::get("https://petscan.wmflabs.org/?psid=23807355&format=plain").await?.text().await?;
+    let pages = reqwest::get("https://petscan.wmflabs.org/?psid=23807355&format=plain")
+        .await?
+        .text()
+        .await?;
     let pages: Vec<_> = pages.lines().collect();
 
     debug!("got {} pages from petscan", pages.len());
@@ -240,7 +245,7 @@ pub async fn main() -> Result<()> {
 
     // let parsoid = parsoid_from_url("https://test.wikipedia.org/api/rest_v1")?;
     let parsoid = enwiki_parsoid()?;
-    
+
     for page in pages {
         treat(&client, &parsoid, page).await?;
         tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;

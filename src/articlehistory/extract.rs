@@ -207,10 +207,7 @@ pub fn extract_itn(t: &Template) -> Result<Option<Vec<ParameterType>>> {
 
     Ok(Some(
         map.into_values()
-            .map(|Itn { date }| ParameterType::Itn {
-                date,
-                link: None,
-            })
+            .map(|Itn { date }| ParameterType::Itn { date, link: None })
             .collect(),
     ))
 }

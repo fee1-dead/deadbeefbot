@@ -1,5 +1,5 @@
+use copypasta::x11_clipboard::{Clipboard, X11ClipboardContext};
 use copypasta::ClipboardProvider;
-use copypasta::x11_clipboard::{X11ClipboardContext, Clipboard};
 
 fn main() -> color_eyre::Result<()> {
     let mut clipboard = X11ClipboardContext::<Clipboard>::new().unwrap();

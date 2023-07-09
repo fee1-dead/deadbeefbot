@@ -1,7 +1,7 @@
 use std::fs;
 
 use color_eyre::eyre::Context;
-use futures_util::{Stream, TryStreamExt, Future};
+use futures_util::{Future, Stream, TryStreamExt};
 use parsoid::Template;
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
@@ -91,7 +91,9 @@ pub fn check_nobots(t: &Template) -> bool {
                 || t.param("deny").map_or(false, |x| x.contains("DeadbeefBot"))))
 }
 
-pub fn setup<F: Future<Output = color_eyre::Result<()>>>(x: impl FnOnce() -> F) -> color_eyre::Result<()> {
+pub fn setup<F: Future<Output = color_eyre::Result<()>>>(
+    x: impl FnOnce() -> F,
+) -> color_eyre::Result<()> {
     color_eyre::install()?;
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
