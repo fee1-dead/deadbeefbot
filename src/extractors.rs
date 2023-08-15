@@ -7,6 +7,7 @@ use wiki::Bot;
 
 mod dyk;
 mod oldpr;
+mod ga;
 
 #[derive(Clone, Copy, Debug)]
 pub struct ExtractContext<'cx> {
@@ -53,6 +54,7 @@ pub fn extract_all<'cx>(cx: ExtractContext<'cx>, t: &Template, ah: &mut ArticleH
     }
     extract!(dyk::DykExtractor);
     extract!(oldpr::OldPrExtractor);
+    extract!(ga::GaExtractor);
     Ok(())
 }
 

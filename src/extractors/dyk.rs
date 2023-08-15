@@ -9,6 +9,7 @@ use super::{Extractor, ExtractContext};
 pub struct DykExtractor;
 
 #[derive(Deserialize, Debug)]
+#[serde(deny_unknown_fields)]
 pub struct Dyk {
     pub date: PreserveDate,
     pub entry: Option<String>,
