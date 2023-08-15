@@ -1,8 +1,10 @@
 //! Merge `{{On this day}}` templates into `{{article history}}` if exists.
 
 use std::collections::HashMap;
+use std::ops::ControlFlow;
 
 use chrono::{DateTime, TimeZone, Utc};
+use color_eyre::eyre::bail;
 use parsoid::map::IndexMap;
 use parsoid::{Template, WikiMultinode, WikinodeIterator};
 use serde::de::DeserializeOwned;
@@ -107,6 +109,36 @@ pub enum ActionKind {
     Drv,
 }
 
+impl ActionKind {
+    pub fn as_str(&self) -> &'static str {
+        use ActionKind::*;
+        match self {
+            Fac => "FAC",
+            Far => "FAR",
+            Rbp => "RBP",
+            Bp => "BP",
+            Flc => "FLC",
+            Flr => "FLR",
+            Ftc => "FTC",
+            Ftr => "FTR",
+            Fproc => "FPROC",
+            Fpor => "FPOR",
+            Gan => "GAN",
+            Gar => "GAR",
+            Gtc => "GTC",
+            Pr => "PR",
+            Wpr => "WPR",
+            War => "WAR",
+            Afd => "AFD",
+            Mfd => "MFD",
+            Tfd => "TFD",
+            Csd => "CSD",
+            Prod => "PROD",
+            Drv => "DRV",
+        }
+    }
+}
+
 impl<'de> Deserialize<'de> for ActionKind {
     fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
     where
@@ -152,6 +184,65 @@ pub struct Action {
     pub link: Option<String>,
     pub result: Option<String>,
     pub oldid: Option<String>,
+}
+
+impl Action {
+    /// Extract current status based on this table: https://en.wikipedia.org/wiki/Template:Article_history#How_to_use_in_practice
+    ///
+    /// If this returns Err then we've got our assumptions wrong and this page is untreatable.
+    pub fn opt_to_current_status(&self) -> Result<Option<&'static str>> {
+        use ActionKind::*;
+        let res = self.result.as_deref().map(str::to_ascii_lowercase);
+        match (self.kind, res.as_deref()) {
+            (Fac, Some("promoted")) => Ok(Some("FA")),
+            (Fac, Some("failed")) => Ok(Some("FFAC")),
+            (Fac, _) => bail!("unknown fac"),
+
+            (Far, Some("kept")) => Ok(Some("FA")),
+            (Far, Some("removed")) => Ok(Some("FFA")),
+            (Far, _) => bail!("unknown far"),
+
+            (Rbp, _) => bail!("idk how to deal with rbp"),
+            (Bp, _) => Ok(None),
+
+            (Flc, Some("promoted")) => Ok(Some("FL")),
+            (Flc, Some("failed")) => Ok(Some("FFLC")),
+            (Flc, _) => bail!("unknown flc"),
+
+            (Flr, Some("kept")) => Ok(Some("FL")),
+            (Flr, Some("removed")) => Ok(Some("FFL")),
+            (Flr, _) => bail!("unknown flr"),
+
+            (Ftc, _) => Ok(None),
+            (Ftr, _) => Ok(None),
+
+            (Fproc, Some("promoted")) => Ok(Some("FPO")),
+            (Fproc, Some("failed")) => Ok(Some("FFPOC")),
+            (Fproc, _) => bail!("unknown fproc"),
+
+            (Fpor, Some("kept")) => Ok(Some("FPO")),
+            (Fpor, Some("removed")) => Ok(Some("FFPO")),
+            (Fpor, _) => bail!("unknown fpor"),
+
+            (Gan, Some("listed")) => Ok(Some("GA")),
+            (Gan, Some("failed")) => Ok(Some("FGAN")),
+            (Gan, _) => bail!("unknown gan"),
+
+            (Gar, Some("kept" | "listed")) => Ok(Some("GA")),
+            (Gar, Some("delisted")) => Ok(Some("DGA")),
+
+            (Gtc | Pr | Wpr | War | Afd | Mfd | Tfd | Csd | Prod | Drv, _) => Ok(None),
+
+            _ => {
+                todo!()
+            }
+        }
+    }
+
+    pub fn add_to_params(&self, i: usize, params: &mut IndexMap<String, String>) {
+        params.insert(format!("action{i}"), self.kind.as_str().to_owned());
+        todo!()
+    }
 }
 
 #[derive(Deserialize, Debug)]
@@ -209,15 +300,40 @@ pub struct ArticleHistory {
 }
 
 impl ArticleHistory {
-    pub fn sort(&mut self) {
-        self.actions.sort_by_key(|action| action.date.date)
+    pub fn sort_and_update_status(&mut self) -> Result<()> {
+        self.actions.sort_by_key(|action| action.date.date);
+        let status = self.actions.iter().try_rfold(ControlFlow::Continue(()), |x, action| -> Result<_> {
+            if let ControlFlow::Break(br) = x {
+                return Ok(ControlFlow::Break(br))
+            }
+            if let Some(stat) = action.opt_to_current_status()? {
+                Ok(ControlFlow::Break(stat))
+            } else {
+                Ok(ControlFlow::Continue(()))
+            }
+        })?;
+        match status {
+            ControlFlow::Break(status) => {
+                if self.currentstatus.as_ref().is_some_and(|x| x != status) {
+                    bail!("current status mismatch: {:?} vs {:?}", self.currentstatus, status)
+                }
+
+                self.currentstatus = Some(status.into())
+            }
+            ControlFlow::Continue(()) => {}
+        }
+        Ok(())
     }
 
+    /// Does the final job of re-serializing this into the template.
     pub fn into_template(mut self, t: &mut Template) -> Result<()> {
-        self.sort();
+        self.sort_and_update_status()?;
         t.set_name("Article history{{subst:User:0xDeadbeef/newline}}".into())?;
 
-        t.set_params([])?;
+        let mut params = IndexMap::new();
+
+
+        t.set_params(params)?;
 
         Ok(())
     }
