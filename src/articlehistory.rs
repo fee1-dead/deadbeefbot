@@ -1,6 +1,5 @@
 //! Merge `{{On this day}}` templates into `{{article history}}` if exists.
 
-use std::collections::HashMap;
 use std::num::NonZeroUsize;
 use std::ops::ControlFlow;
 
@@ -511,12 +510,6 @@ pub enum Ty {
 
 mod extract;
 
-pub struct Info {
-    start_index: Option<usize>,
-    others: Vec<(String, String)>,
-    params: HashMap<(Ty, usize), Parameter>,
-}
-
 pub async fn treat(client: &wiki::Bot, parsoid: &parsoid::Client, title: &str) -> Result<()> {
     info!("Treating [[{}]]", title);
 
@@ -657,7 +650,7 @@ pub async fn main() -> Result<()> {
         .text()
         .await?;
     let pages: Vec<_> = pages.lines().collect();*/
-    let pages = vec!["Talk:Footastic"];
+    let pages = vec!["Talk:Footastic2", "Talk:Footastic3"];
 
     debug!("got {} pages from petscan", pages.len());
 

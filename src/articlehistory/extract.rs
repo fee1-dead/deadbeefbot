@@ -3,7 +3,7 @@ use std::iter;
 
 use crate::articlehistory::ParameterType;
 
-use super::{ArticleHistory, Info, Parameter, PreserveDate, Result, Ty};
+use super::{ArticleHistory, Parameter, PreserveDate, Result, Ty};
 use parsoid::Template;
 
 use serde::Deserialize;

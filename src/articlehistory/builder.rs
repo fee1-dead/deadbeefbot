@@ -16,7 +16,13 @@ impl<'a> ParamBuilder<'a> {
     }
 
     pub fn add(&mut self, key: impl Into<String>, value: impl Into<String>) -> &mut Self {
-        self.params.insert(key.into(), value.into());
+        let mut key = key.into();
+        // trick parser into thinking that param name has changed
+        key.push_str("{{subst:null}}");
+
+        let mut value = value.into();
+        value.push_str("{{subst:User:0xDeadbeef/newline}}");
+        self.params.insert(key, value);
         self
     }
 
@@ -26,7 +32,7 @@ impl<'a> ParamBuilder<'a> {
         value: Option<impl Into<String>>,
     ) -> &mut Self {
         if let Some(value) = value {
-            self.params.insert(key.into(), value.into());
+            self.add(key, value);
         }
         self
     }
@@ -41,7 +47,7 @@ impl<'a> ParamBuilder<'a> {
 
     pub fn add_flag(&mut self, key: impl Into<String>, flag: bool) -> &mut Self {
         if flag {
-            self.params.insert(key.into(), "yes".into());
+            self.add(key, "yes");
         }
         self
     }
