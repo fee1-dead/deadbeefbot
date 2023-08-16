@@ -4,7 +4,7 @@ use serde::Deserialize;
 
 use crate::articlehistory::PreserveDate;
 
-use super::{Extractor, ExtractContext};
+use super::{ExtractContext, Extractor};
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -19,14 +19,16 @@ pub struct OldPeerReview {
 
 pub struct OldPrExtractor;
 
-
 impl Extractor for OldPrExtractor {
     type Value = OldPeerReview;
 
     const ALIAS: &'static [&'static str] = &["old peer review", "oldpeerreview"];
 
-    fn merge_value_into<'cx>(&self, _cx: ExtractContext<'cx>, _value: OldPeerReview, _into: &mut crate::articlehistory::ArticleHistory) {
-        
+    fn merge_value_into<'cx>(
+        &self,
+        _cx: ExtractContext<'cx>,
+        _value: OldPeerReview,
+        _into: &mut crate::articlehistory::ArticleHistory,
+    ) {
     }
 }
-

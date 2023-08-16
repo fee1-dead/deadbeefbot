@@ -52,13 +52,12 @@ pub async fn real_main() -> color_eyre::Result<()> {
                 let parsoid = parsoid.clone();
                 let map = map.clone();
                 tokio::spawn(async move {
-                    let Ok(page) = parsoid.get(&page.title).await
-                else {
-                    return;
-                };
+                    let Ok(page) = parsoid.get(&page.title).await else {
+                        return;
+                    };
                     let Ok(templates) = page.into_mutable().filter_templates() else {
-                    return;
-                };
+                        return;
+                    };
                     for template in templates {
                         if AH.contains(&&*template.name().to_ascii_lowercase()) {
                             for (name, _) in template.params() {

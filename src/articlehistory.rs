@@ -1,23 +1,26 @@
 //! Merge `{{On this day}}` templates into `{{article history}}` if exists.
 
 use std::collections::HashMap;
+use std::num::NonZeroUsize;
 use std::ops::ControlFlow;
 
 use chrono::{DateTime, TimeZone, Utc};
 use color_eyre::eyre::bail;
 use parsoid::map::IndexMap;
-use parsoid::{Template, WikiMultinode, WikinodeIterator};
-use serde::de::DeserializeOwned;
+use parsoid::{Template, WikinodeIterator};
 use serde::Deserialize;
 use tracing::{debug, info};
 use wiki::req::PageSpec;
 
-use crate::articlehistory::extract::{extract_dyk, extract_itn, extract_otd};
 use crate::extractors::ExtractContext;
-use crate::{check_nobots, enwiki_bot, enwiki_parsoid, Result};
+use crate::{check_nobots, Result};
 
 #[allow(unused_imports)]
 use crate::{parsoid_from_url, site_from_url};
+
+mod builder;
+
+use builder::{AddToParams, ParamBuilder};
 
 /// taken from [here](https://en.wikipedia.org/wiki/Special:WhatLinksHere?target=Template%3AArticle+history&namespace=&hidetrans=1&hidelinks=1).
 ///
@@ -37,8 +40,6 @@ const OTD: &[&str] = &[
     "satalk",
     "onthisday",
 ];
-
-
 
 /// https://en.wikipedia.org/wiki/Special:WhatLinksHere?target=Template%3AITN+talk&namespace=&hidetrans=1&hidelinks=1
 const ITN: &[&str] = &["itn talk", "itntalk"];
@@ -238,10 +239,16 @@ impl Action {
             }
         }
     }
+}
 
-    pub fn add_to_params(&self, i: usize, params: &mut IndexMap<String, String>) {
-        params.insert(format!("action{i}"), self.kind.as_str().to_owned());
-        todo!()
+impl AddToParams for Action {
+    fn add_to_params(self, i: NonZeroUsize, params: &mut ParamBuilder<'_>) {
+        params.add(format!("action{i}"), self.kind.as_str());
+        params.add(format!("action{i}date"), self.date.orig);
+        params.add_opt(format!("action{i}link"), self.link);
+        params.add_opt(format!("action{i}result"), self.result);
+        params.add_opt(format!("action{i}oldid"), self.oldid);
+        params.newline()
     }
 }
 
@@ -254,10 +261,26 @@ pub struct Dyk {
     pub ignoreerror: bool,
 }
 
+impl AddToParams for Dyk {
+    fn add_to_params(self, i: NonZeroUsize, params: &mut ParamBuilder<'_>) {
+        params.add(format!("dyk{i}date"), self.date.orig);
+        params.add_opt(format!("dyk{i}entry"), self.entry);
+        params.add_opt(format!("dyk{i}nom"), self.nom);
+        params.add_flag(format!("dyk{i}ignoreerror"), self.ignoreerror);
+    }
+}
+
 #[derive(Deserialize, Debug)]
 pub struct Itn {
     pub date: PreserveDate,
     pub link: Option<String>,
+}
+
+impl AddToParams for Itn {
+    fn add_to_params(self, i: NonZeroUsize, params: &mut ParamBuilder<'_>) {
+        params.add(format!("itn{i}date"), self.date.orig);
+        params.add_opt(format!("itn{i}link"), self.link);
+    }
 }
 
 #[derive(Deserialize, Debug)]
@@ -267,11 +290,31 @@ pub struct Otd {
     pub link: Option<String>,
 }
 
+impl AddToParams for Otd {
+    fn add_to_params(self, i: NonZeroUsize, params: &mut ParamBuilder<'_>) {
+        params.add(format!("otd{i}date"), self.date.orig);
+        params.add_opt(format!("otd{i}oldid"), self.oldid);
+        params.add_opt(format!("otd{i}link"), self.link);
+    }
+}
+
 #[derive(Debug, Deserialize)]
 pub struct FeaturedTopic {
     pub name: String,
     #[serde(default)]
     pub main: bool,
+}
+
+impl AddToParams for FeaturedTopic {
+    fn add_to_params(self, i: NonZeroUsize, params: &mut ParamBuilder<'_>) {
+        let i = if i.get() == 1 {
+            String::new()
+        } else {
+            format!("{i}")
+        };
+        params.add(format!("ft{i}name"), self.name);
+        params.add_flag(format!("ft{i}main"), self.main);
+    }
 }
 
 /// Rules:
@@ -283,39 +326,48 @@ pub struct FeaturedTopic {
 #[serde(deny_unknown_fields)]
 pub struct ArticleHistory {
     pub actions: Vec<Action>,
+
+    pub currentstatus: Option<String>,
+    pub maindate: Option<PreserveDate>,
+    pub maindate2: Option<PreserveDate>,
+    pub itns: Vec<Itn>,
+    pub dyks: Vec<Dyk>,
+    pub otds: Vec<Otd>,
+    #[serde(default)]
+    pub four: bool,
+    pub featured_topics: Vec<FeaturedTopic>,
+    pub topic: Option<String>,
+
     #[serde(default)]
     pub collapse: bool,
     #[serde(default)]
     pub small: bool,
-    pub currentstatus: Option<String>,
-    pub topic: Option<String>,
-    pub dyks: Vec<Dyk>,
-    pub itns: Vec<Itn>,
-    pub otds: Vec<Otd>,
-    pub featured_topics: Vec<FeaturedTopic>,
-    pub maindate: Option<PreserveDate>,
-    pub maindate2: Option<PreserveDate>,
-    #[serde(default)]
-    pub four: bool,
 }
 
 impl ArticleHistory {
     pub fn sort_and_update_status(&mut self) -> Result<()> {
         self.actions.sort_by_key(|action| action.date.date);
-        let status = self.actions.iter().try_rfold(ControlFlow::Continue(()), |x, action| -> Result<_> {
-            if let ControlFlow::Break(br) = x {
-                return Ok(ControlFlow::Break(br))
-            }
-            if let Some(stat) = action.opt_to_current_status()? {
-                Ok(ControlFlow::Break(stat))
-            } else {
-                Ok(ControlFlow::Continue(()))
-            }
-        })?;
+        let status =
+            self.actions
+                .iter()
+                .try_rfold(ControlFlow::Continue(()), |x, action| -> Result<_> {
+                    if let ControlFlow::Break(br) = x {
+                        return Ok(ControlFlow::Break(br));
+                    }
+                    if let Some(stat) = action.opt_to_current_status()? {
+                        Ok(ControlFlow::Break(stat))
+                    } else {
+                        Ok(ControlFlow::Continue(()))
+                    }
+                })?;
         match status {
             ControlFlow::Break(status) => {
                 if self.currentstatus.as_ref().is_some_and(|x| x != status) {
-                    bail!("current status mismatch: {:?} vs {:?}", self.currentstatus, status)
+                    bail!(
+                        "current status mismatch: {:?} vs {:?}",
+                        self.currentstatus,
+                        status
+                    )
                 }
 
                 self.currentstatus = Some(status.into())
@@ -332,6 +384,20 @@ impl ArticleHistory {
 
         let mut params = IndexMap::new();
 
+        let mut builder = ParamBuilder::new(&mut params);
+
+        builder.add_all(self.actions);
+        builder.add_opt("currentstatus", self.currentstatus);
+        builder.add_opt("maindate", self.maindate.map(|x| x.orig));
+        builder.add_opt("maindate2", self.maindate2.map(|x| x.orig));
+        builder.add_all(self.itns);
+        builder.add_all(self.dyks);
+        builder.add_all(self.otds);
+        builder.add_flag("four", self.four);
+        builder.add_all(self.featured_topics);
+        builder.add_opt("topic", self.topic);
+        builder.add_flag("collapse", self.collapse);
+        builder.add_flag("small", self.small);
 
         t.set_params(params)?;
 
@@ -457,16 +523,19 @@ pub async fn treat(client: &wiki::Bot, parsoid: &parsoid::Client, title: &str) -
     let wikicode = parsoid.get(title).await?.into_mutable();
     let rev = wikicode.revision_id().unwrap();
     let templates = wikicode.filter_templates()?;
-    let Some(article_history) = templates
-        .iter()
-        .find(|x| AH.contains(&&*x.name().trim_start_matches("Template:").to_ascii_lowercase()))
-    else {
-        return Ok(())
+    let Some(article_history) = templates.iter().find(|x| {
+        AH.contains(
+            &&*x.name()
+                .trim_start_matches("Template:")
+                .to_ascii_lowercase(),
+        )
+    }) else {
+        return Ok(());
     };
 
     article_history.set_name("Article history{{subst:User:0xDeadbeef/newline}}".to_owned())?;
     let Some(mut ah) = crate::articlehistory::extract::extract_info(article_history)? else {
-        return Ok(())
+        return Ok(());
     };
 
     let cx = ExtractContext { client, parsoid };
@@ -480,8 +549,22 @@ pub async fn treat(client: &wiki::Bot, parsoid: &parsoid::Client, title: &str) -
 
         crate::extractors::extract_all(cx, template, &mut ah)?;
     }
-    
+
     info!("extraction complete, AH: {ah:#?}");
+
+    ah.into_template(&mut article_history.clone())?;
+
+    let text = parsoid.transform_to_wikitext(&wikicode).await?;
+
+    client
+        .build_edit(PageSpec::Title(title.to_owned()))
+        .text(text)
+        .summary("merged OTD/ITN/DYK templates to {{article history}} ([[Wikipedia:Bots/Requests for approval/DeadbeefBot 2|BRFA]])")
+        .baserevid(rev as u32)
+        .minor()
+        .bot()
+        .send()
+        .await?;
 
     Ok(())
     /*
@@ -563,17 +646,7 @@ pub async fn treat(client: &wiki::Bot, parsoid: &parsoid::Client, title: &str) -
         article_history.set_params(params.into_iter().collect::<IndexMap<_, _>>())?;
 
         // we are done with modifying wikicode.
-        let text = parsoid.transform_to_wikitext(&wikicode).await?;
 
-        client
-                        .build_edit(PageSpec::Title(title.to_owned()))
-                        .text(text)
-                        .summary("merged OTD/ITN/DYK templates to {{article history}} ([[Wikipedia:Bots/Requests for approval/DeadbeefBot 2|BRFA]])")
-                        .baserevid(rev as u32)
-                        .minor()
-                        .bot()
-                        .send()
-                        .await?;
 
         Ok(())*/
 }
