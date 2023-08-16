@@ -1,4 +1,4 @@
-use crate::articlehistory::{ArticleHistory, PreserveDate, Action, ActionKind};
+use crate::articlehistory::{Action, ActionKind, ArticleHistory, PreserveDate};
 use serde::Deserialize;
 use tracing::warn;
 
@@ -22,7 +22,12 @@ impl Extractor for GaExtractor {
     type Value = Ga;
     /// https://en.wikipedia.org/wiki/Special:WhatLinksHere?target=Template%3AGA&namespace=&hidetrans=1&hidelinks=1
     const ALIAS: &'static [&'static str] = &["ga"];
-    fn merge_value_into<'cx>(&self, _cx: super::ExtractContext<'cx>, value: Ga, into: &mut ArticleHistory) {
+    fn merge_value_into<'cx>(
+        &self,
+        _cx: super::ExtractContext<'cx>,
+        value: Ga,
+        into: &mut ArticleHistory,
+    ) {
         if let Some(topic) = value.topic {
             if let Some(topic2) = &into.topic {
                 if topic2 != &topic {

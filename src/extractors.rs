@@ -1,13 +1,14 @@
-use crate::Result;
 use crate::articlehistory::ArticleHistory;
+use crate::Result;
 use parsoid::Template;
+use parsoid::WikiMultinode;
 use serde::de::DeserializeOwned;
-use serde_json::{Value, Map};
+use serde_json::{Map, Value};
 use wiki::Bot;
 
 mod dyk;
-mod oldpr;
 mod ga;
+mod oldpr;
 
 #[derive(Clone, Copy, Debug)]
 pub struct ExtractContext<'cx> {
@@ -16,12 +17,18 @@ pub struct ExtractContext<'cx> {
 }
 
 pub fn simple_extract<T: DeserializeOwned>(t: &Template) -> Result<T> {
-    let x: Map<_, _>  = t.params().into_iter().map(|(a, b)| (a, Value::String(b))).collect();
+    let x: Map<_, _> = t
+        .params()
+        .into_iter()
+        .map(|(a, b)| (a, Value::String(b)))
+        .collect();
     Ok(serde_json::from_value(Value::Object(x))?)
 }
 
 pub fn template_name(t: &Template) -> String {
-    t.name().trim_start_matches("Template:").to_ascii_lowercase()
+    t.name()
+        .trim_start_matches("Template:")
+        .to_ascii_lowercase()
 }
 
 pub trait Extractor {
@@ -38,16 +45,26 @@ pub trait Extractor {
     fn extract(&self, t: &Template) -> Result<Self::Value> {
         Ok(serde_json::from_value(simple_extract(t)?)?)
     }
-    fn merge_value_into<'cx>(&self, cx: ExtractContext<'cx>, value: Self::Value, into: &mut ArticleHistory);
+    fn merge_value_into<'cx>(
+        &self,
+        cx: ExtractContext<'cx>,
+        value: Self::Value,
+        into: &mut ArticleHistory,
+    );
 }
 
-pub fn extract_all<'cx>(cx: ExtractContext<'cx>, t: &Template, ah: &mut ArticleHistory) -> crate::Result<()> {
+pub fn extract_all<'cx>(
+    cx: ExtractContext<'cx>,
+    t: &Template,
+    ah: &mut ArticleHistory,
+) -> crate::Result<()> {
     macro_rules! extract {
         ($v:expr) => {
             let e = $v;
             if e.is_extractable(t) {
                 let val = e.extract(t)?;
                 e.merge_value_into(cx, val, ah);
+                t.detach();
                 return Ok(());
             }
         };
@@ -57,6 +74,3 @@ pub fn extract_all<'cx>(cx: ExtractContext<'cx>, t: &Template, ah: &mut ArticleH
     extract!(ga::GaExtractor);
     Ok(())
 }
-
-
-

@@ -171,8 +171,12 @@ async fn run(site: &SiteCfg) -> color_eyre::Result<()> {
                     if name != "template:cite web" && name != "template:cite tweet" {
                         return Ok(());
                     }
-                    let Some(param) = template.param("archive-url") else { return Ok(()) };
-                    let Some(captures) = wre.captures(&param)? else { return Ok(()) };
+                    let Some(param) = template.param("archive-url") else {
+                        return Ok(());
+                    };
+                    let Some(captures) = wre.captures(&param)? else {
+                        return Ok(());
+                    };
                     let timestamp = &captures[1];
                     let url = &captures[2];
                     let new_url = treat(url)?;

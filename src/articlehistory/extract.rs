@@ -3,7 +3,7 @@ use std::iter;
 
 use crate::articlehistory::ParameterType;
 
-use super::{ArticleHistory, Info, Parameter, Result, Ty, PreserveDate};
+use super::{ArticleHistory, Info, Parameter, PreserveDate, Result, Ty};
 use parsoid::Template;
 
 use serde::Deserialize;
@@ -36,9 +36,9 @@ pub fn extract_info(article_history: &Template) -> Result<Option<ArticleHistory>
                     0
                 } else {
                     let Ok(num) = name[..num_end].parse::<usize>() else {
-                                        warn!("failed to parse {} number: {name}", $name);
-                                        return Ok(None);
-                                    };
+                        warn!("failed to parse {} number: {name}", $name);
+                        return Ok(None);
+                    };
                     num
                 };
 
@@ -209,8 +209,6 @@ pub fn extract_itn(t: &Template) -> ExtractResultMulti {
             .collect(),
     ))
 }
-
-
 
 pub fn extract_failed_ga(t: &Template) -> ExtractResultSingle {
     let mut date = None;
