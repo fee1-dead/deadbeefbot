@@ -1,19 +1,23 @@
 //! Merge `{{On this day}}` templates into `{{article history}}` if exists.
 
+use std::io::stdin;
 use std::num::NonZeroUsize;
 use std::ops::ControlFlow;
+use std::process;
 
 use chrono::{DateTime, TimeZone, Utc};
 use color_eyre::eyre::bail;
+use colored_diff::PrettyDifference;
 use parsoid::map::IndexMap;
-use parsoid::{Template, WikinodeIterator};
+use parsoid::{Template, WikiMultinode, WikinodeIterator};
 use serde::Deserialize;
 use tracing::{debug, info};
-use wiki::req::PageSpec;
+use wiki::api::RequestBuilderExt;
+use wiki::req::parse::{Parse, ParseProp};
+use wiki::req::{self, PageSpec};
 
 use crate::extractors::ExtractContext;
-use crate::{check_nobots, Result};
-
+use crate::{check_nobots, enwiki_bot, enwiki_parsoid, Result};
 #[allow(unused_imports)]
 use crate::{parsoid_from_url, site_from_url};
 
@@ -31,14 +35,6 @@ const AH: &[&str] = &[
     "articlehistory",
 ];
 
-/// https://en.wikipedia.org/wiki/Special:WhatLinksHere?target=Template%3AOn+this+day&namespace=&hidetrans=1&hidelinks=1
-const OTD: &[&str] = &[
-    "on this day",
-    "selected anniversary",
-    "otdtalk",
-    "satalk",
-    "onthisday",
-];
 
 /// https://en.wikipedia.org/wiki/Special:WhatLinksHere?target=Template%3AITN+talk&namespace=&hidetrans=1&hidelinks=1
 const ITN: &[&str] = &["itn talk", "itntalk"];
@@ -49,17 +45,22 @@ pub struct PreserveDate {
     pub orig: String,
 }
 
+impl PreserveDate {
+    pub fn try_from_string(x: String) -> Result<Self, String> {
+        let date = timelib::strtotime(x.clone(), None, None)?;
+        Ok(PreserveDate {
+            date: Utc.timestamp_opt(date, 0).unwrap(),
+            orig: x,
+        })
+    }
+}
+
 impl<'de> Deserialize<'de> for PreserveDate {
     fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
-        let s = String::deserialize(deserializer)?;
-        let date = timelib::strtotime(s.clone(), None, None).map_err(serde::de::Error::custom)?;
-        Ok(PreserveDate {
-            date: Utc.timestamp_opt(date, 0).unwrap(),
-            orig: s,
-        })
+        Self::try_from_string(String::deserialize(deserializer)?).map_err(serde::de::Error::custom)
     }
 }
 
@@ -379,7 +380,7 @@ impl ArticleHistory {
     /// Does the final job of re-serializing this into the template.
     pub fn into_template(mut self, t: &mut Template) -> Result<()> {
         self.sort_and_update_status()?;
-        t.set_name("Article history{{subst:User:0xDeadbeef/newline}}".into())?;
+        //        t.set_name("Article history{{subst:User:0xDeadbeef/newline}}".into())?;
 
         let mut params = IndexMap::new();
 
@@ -510,23 +511,56 @@ pub enum Ty {
 
 mod extract;
 
-pub async fn treat(client: &wiki::Bot, parsoid: &parsoid::Client, title: &str) -> Result<()> {
+pub async fn treat(
+    client: &wiki::Bot,
+    parsoid: &parsoid::Client,
+    title: &str,
+    prompt: bool,
+) -> Result<()> {
     info!("Treating [[{}]]", title);
 
     let wikicode = parsoid.get(title).await?.into_mutable();
     let rev = wikicode.revision_id().unwrap();
     let templates = wikicode.filter_templates()?;
-    let Some(article_history) = templates.iter().find(|x| {
+    let ah_created;
+
+    let article_history = match templates.iter().find(|x| {
         AH.contains(
             &&*x.name()
                 .trim_start_matches("Template:")
                 .to_ascii_lowercase(),
         )
-    }) else {
-        return Ok(());
+    }) {
+        Some(article_history) => {
+            article_history
+                .set_name("Article history{{subst:User:0xDeadbeef/newline}}".to_owned())?;
+            article_history
+        }
+        None => {
+            // mount an article history template.
+            let Some(banner) = templates.iter().find(|x| {
+                x.name()
+                    .trim_start_matches("Template:")
+                    .to_ascii_lowercase()
+                    == "wikiproject banner shell"
+            }) else {
+                return Ok(());
+            };
+
+            ah_created = Template::new_simple("Article history{{subst:User:0xDeadbeef/newline}}");
+
+            let nl = Template::new_simple("subst:User:0xDeadbeef/newline");
+            let node = nl.as_nodes().pop().unwrap();
+            banner
+                .as_nodes()
+                .first()
+                .unwrap()
+                .insert_before(node.clone());
+            node.insert_before(ah_created.as_nodes().pop().unwrap());
+            &ah_created
+        }
     };
 
-    article_history.set_name("Article history{{subst:User:0xDeadbeef/newline}}".to_owned())?;
     let Some(mut ah) = crate::articlehistory::extract::extract_info(article_history)? else {
         return Ok(());
     };
@@ -549,119 +583,83 @@ pub async fn treat(client: &wiki::Bot, parsoid: &parsoid::Client, title: &str) -
 
     let text = parsoid.transform_to_wikitext(&wikicode).await?;
 
-    client
-        .build_edit(PageSpec::Title(title.to_owned()))
-        .text(text)
-        .summary("merged OTD/ITN/DYK templates to {{article history}} ([[Wikipedia:Bots/Requests for approval/DeadbeefBot 2|BRFA]])")
-        .baserevid(rev as u32)
-        .minor()
-        .bot()
-        .send()
-        .await?;
+    if prompt {
+        // do a pst
+        let val = client
+            .post(req::Action::Parse(Parse {
+                text: Some(text.clone()),
+                title: Some(title.into()),
+                onlypst: true,
+                prop: ParseProp::empty(),
+                ..Default::default()
+            }))
+            .send_and_report_err()
+            .await?["parse"]["text"]
+            .take();
+        let val = val.as_str().unwrap();
+        let prev_text = client.fetch_content(title).await?;
+        let diff = PrettyDifference {
+            expected: &prev_text,
+            actual: val,
+        };
+        println!("{diff}");
+        println!("Make edit? [y/N/q(uit)]");
+        match &*stdin()
+            .lines()
+            .next()
+            .expect("failed to read line")?
+            .as_str()
+            .to_ascii_lowercase()
+        {
+            "y" => {
+                client
+                    .build_edit(PageSpec::Title(title.to_owned()))
+                    .text(text)
+                    .summary("merged OTD/ITN/DYK templates to {{article history}} ([[Wikipedia:Bots/Requests for approval/DeadbeefBot 2|BRFA]])")
+                    .baserevid(rev as u32)
+                    .minor()
+                    .bot()
+                    .send()
+                    .await?;
+            }
+            "q" | "quit" => {
+                process::exit(0);
+            }
+            _ => {}
+        }
+    } else {
+        client
+            .build_edit(PageSpec::Title(title.to_owned()))
+            .text(text)
+            .summary("merged OTD/ITN/DYK templates to {{article history}} ([[Wikipedia:Bots/Requests for approval/DeadbeefBot 2|BRFA]])")
+            .baserevid(rev as u32)
+            .minor()
+            .bot()
+            .send()
+            .await?;
+    }
 
     Ok(())
-    /*
-        let Some(Info {
-            start_index, mut others, params
-        }) = extract::extract_info(article_history)? else {
-            return Ok(())
-        };
-
-        let mut params: Vec<_> = params.into_values().map(|p| p.ty).collect();
-
-        for template in &templates {
-            if check_nobots(template) {
-                return Ok(())
-            }
-
-            let template_name = template
-                .name()
-                .trim_start_matches("Template:")
-                .to_ascii_lowercase();
-
-            if OTD.contains(&&*template_name) {
-                template.detach();
-                let Some(mut x) = extract_otd(template)? else { return Ok(()) };
-                debug!(?x);
-                params.append(&mut x)
-            } else if DYK.contains(&&*template_name) {
-                template.detach();
-                let Some(x) = extract_dyk(template)? else { return Ok(()) };
-                params.push(x)
-            } else if ITN.contains(&&*template_name) {
-                template.detach();
-                let Some(mut x) = extract_itn(template)? else { return Ok(()) };
-                params.append(&mut x)
-            }
-        }
-
-        // sort parameters.
-        params.sort_unstable();
-
-        let mut to_insert = Vec::with_capacity(params.len());
-
-        debug!(?params);
-
-        let mut dykcount = 0;
-        let mut otdcount = 0;
-        let mut itncount = 0;
-
-        // convert parameters to final form.
-        for param in params {
-            let index = match param {
-                ParameterType::Dyk { .. } => {
-                    dykcount += 1;
-                    dykcount
-                }
-                ParameterType::Otd { .. } => {
-                    otdcount += 1;
-                    otdcount
-                }
-                ParameterType::Itn { .. } => {
-                    itncount += 1;
-                    itncount
-                }
-            };
-
-            Parameter { index, ty: param }.print_into(&mut to_insert);
-        }
-
-        let index = start_index.unwrap_or_else(|| others.len());
-        let others_last = others.split_off(index);
-        /*if let Some((_, b)) = others.last_mut() {
-            b.push_str("{{subst:User:0xDeadbeef/newline}}")
-        }*/
-        others.extend(to_insert);
-        others.extend(others_last);
-
-        let params = others;
-    //    debug!(?params);
-        article_history.set_params(params.into_iter().collect::<IndexMap<_, _>>())?;
-
-        // we are done with modifying wikicode.
-
-
-        Ok(())*/
 }
 
 pub async fn main() -> Result<()> {
-    /*let pages = reqwest::get("https://petscan.wmflabs.org/?psid=24973575&format=plain")
+    let pages = reqwest::get("https://petscan.wmflabs.org/?psid=24768643&format=plain")
         .await?
         .text()
         .await?;
-    let pages: Vec<_> = pages.lines().collect();*/
-    let pages = vec!["Talk:Footastic2", "Talk:Footastic3"];
+    let pages: Vec<_> = pages.lines().collect();
+    // let pages = vec!["Talk:Ebla"];
 
     debug!("got {} pages from petscan", pages.len());
 
-    let client = site_from_url("https://test.wikipedia.org/w/api.php").await?;
-    // let client = enwiki_bot().await?;
+    // let client = site_from_url("https://test.wikipedia.org/w/api.php").await?;
+    let client = enwiki_bot().await?;
 
-    let parsoid = parsoid_from_url("https://test.wikipedia.org/api/rest_v1")?;
-    // let parsoid = enwiki_parsoid()?;
+    // let parsoid = parsoid_from_url("https://test.wikipedia.org/api/rest_v1")?;
+    let parsoid = enwiki_parsoid()?;
 
     for page in pages {
-        treat(&client, &parsoid, page).await?;
+        treat(&client, &parsoid, page, true).await?;
         tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
     }
 

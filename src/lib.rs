@@ -7,7 +7,7 @@ use serde::de::DeserializeOwned;
 use serde::Deserialize;
 use wiki::req::search::SearchGenerator;
 use wiki::req::{self, Query, QueryGenerator};
-use wiki::{Bot, ClientBuilder};
+use wiki::ClientBuilder;
 
 mod extractors;
 
