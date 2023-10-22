@@ -582,12 +582,14 @@ pub async fn treat(
     ah.into_template(&mut article_history.clone())?;
 
     let text = parsoid.transform_to_wikitext(&wikicode).await?;
+    // we sometimes get newlines leftover at the beginning. We need to clean that up
+    let text = text.trim_start();
 
     if prompt {
         // do a pst
         let val = client
             .post(req::Action::Parse(Parse {
-                text: Some(text.clone()),
+                text: Some(text.into()),
                 title: Some(title.into()),
                 onlypst: true,
                 prop: ParseProp::empty(),
