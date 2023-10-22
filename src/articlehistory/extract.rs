@@ -1,12 +1,10 @@
 use std::collections::HashMap;
-use std::iter;
 
 use parsoid::Template;
-use serde::Deserialize;
 use serde_json::{Map, Value};
 use tracing::warn;
 
-use super::{ArticleHistory, Parameter, PreserveDate, Result, Ty};
+use super::{ArticleHistory, Result};
 use crate::articlehistory::ParameterType;
 
 /// first extract useful information from article history.
@@ -108,33 +106,6 @@ pub fn extract_info(article_history: &Template) -> Result<Option<ArticleHistory>
 pub type ExtractResultMulti = Result<Option<Vec<ParameterType>>>;
 pub type ExtractResultSingle = Result<Option<ParameterType>>;
 
-pub fn extract_otd(t: &Template) -> ExtractResultMulti {
-    #[derive(Default)]
-    pub struct Otd {
-        date: Option<String>,
-        oldid: Option<String>,
-    }
-    let mut map: HashMap<u32, Otd> = HashMap::new();
-    for (param, value) in t.params() {
-        if let Some(num) = param.strip_prefix("date") {
-            map.entry(num.parse()?).or_default().date = Some(value);
-        } else if let Some(num) = param.strip_prefix("oldid") {
-            map.entry(num.parse()?).or_default().oldid = Some(value);
-        } else {
-            warn!(?param, "unrecognized parameter");
-            return Ok(None);
-        }
-    }
-    Ok(Some(
-        map.into_values()
-            .map(|Otd { date, oldid }| ParameterType::Otd {
-                date,
-                oldid,
-                link: None,
-            })
-            .collect(),
-    ))
-}
 
 pub fn extract_itn(t: &Template) -> ExtractResultMulti {
     #[derive(Default, PartialEq, Eq, PartialOrd, Ord)]
