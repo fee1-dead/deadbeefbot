@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use chrono::TimeZone;
+use chrono::NaiveDateTime;
 use color_eyre::eyre::{eyre, ContextCompat};
 use fancy_regex::Regex;
 use futures_util::StreamExt;
@@ -229,7 +229,7 @@ async fn run(site: &SiteCfg) -> color_eyre::Result<()> {
                         .context("url should match regex")?
                         .as_str();
 
-                    let time = chrono::Utc.datetime_from_str(time, "%Y%m%d%H%M%S")?;
+                    let time = NaiveDateTime::parse_from_str(time, "%Y%m%d%H%M%S")?;
 
                     let date = time.format("%Y-%m-%d");
                     template.set_param("archive-url", &actual_url).unwrap();

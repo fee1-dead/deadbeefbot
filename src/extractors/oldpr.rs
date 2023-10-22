@@ -2,9 +2,8 @@
 
 use serde::Deserialize;
 
-use crate::articlehistory::PreserveDate;
-
 use super::{ExtractContext, Extractor};
+use crate::articlehistory::{ArticleHistory, PreserveDate};
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -28,7 +27,7 @@ impl Extractor for OldPrExtractor {
         &self,
         _cx: ExtractContext<'cx>,
         _value: OldPeerReview,
-        _into: &mut crate::articlehistory::ArticleHistory,
+        _into: &mut ArticleHistory,
     ) {
     }
 }

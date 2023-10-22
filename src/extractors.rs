@@ -1,14 +1,17 @@
-use crate::articlehistory::ArticleHistory;
-use crate::Result;
-use parsoid::Template;
-use parsoid::WikiMultinode;
+use parsoid::{Template, WikiMultinode};
 use serde::de::DeserializeOwned;
 use serde_json::{Map, Value};
+use tracing::{debug, trace};
 use wiki::Bot;
 
+use crate::articlehistory::ArticleHistory;
+use crate::Result;
+
 mod dyk;
+mod failedga;
 mod ga;
 mod oldpr;
+mod otd;
 
 #[derive(Clone, Copy, Debug)]
 pub struct ExtractContext<'cx> {
@@ -45,12 +48,39 @@ pub trait Extractor {
     fn extract(&self, t: &Template) -> Result<Self::Value> {
         Ok(serde_json::from_value(simple_extract(t)?)?)
     }
+
     fn merge_value_into<'cx>(
         &self,
         cx: ExtractContext<'cx>,
         value: Self::Value,
         into: &mut ArticleHistory,
     );
+}
+
+pub fn detach_template(t: &Template) {
+    let prev = t.as_nodes().first().unwrap().previous_sibling();
+    let next = t.as_nodes().last().unwrap().next_sibling();
+    trace!(?prev, ?next);
+    let mut wasnl = false;
+    for node in prev.into_iter().chain(next) {
+        // clean any leftover extra newlines
+        if let Some(s) = node.as_text() {
+            let (newline_count, len) = {
+                let s = &*s.borrow();
+                (s.chars().take_while(|&x| x == '\n').count(), s.len())
+            };
+            if newline_count != len {
+                continue;
+            }
+            if wasnl {
+                *s.borrow_mut() = "".into();
+            } else if newline_count >= 2 {
+                *s.borrow_mut() = "\n".into();
+            }
+            wasnl = newline_count > 0;
+        }
+    }
+    t.detach();
 }
 
 pub fn extract_all<'cx>(
@@ -62,15 +92,18 @@ pub fn extract_all<'cx>(
         ($v:expr) => {
             let e = $v;
             if e.is_extractable(t) {
+                debug!("extracted through `{}`", stringify!($v));
                 let val = e.extract(t)?;
                 e.merge_value_into(cx, val, ah);
-                t.detach();
+                detach_template(t);
                 return Ok(());
             }
         };
     }
     extract!(dyk::DykExtractor);
-    extract!(oldpr::OldPrExtractor);
+    // extract!(oldpr::OldPrExtractor);
     extract!(ga::GaExtractor);
+    extract!(failedga::FailedGaExtractor);
+    extract!(otd::OtdExtractor);
     Ok(())
 }

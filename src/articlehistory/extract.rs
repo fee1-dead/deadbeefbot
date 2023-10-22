@@ -1,14 +1,13 @@
 use std::collections::HashMap;
 use std::iter;
 
-use crate::articlehistory::ParameterType;
-
-use super::{ArticleHistory, Parameter, PreserveDate, Result, Ty};
 use parsoid::Template;
-
 use serde::Deserialize;
 use serde_json::{Map, Value};
 use tracing::warn;
+
+use super::{ArticleHistory, Parameter, PreserveDate, Result, Ty};
+use crate::articlehistory::ParameterType;
 
 /// first extract useful information from article history.
 pub fn extract_info(article_history: &Template) -> Result<Option<ArticleHistory>> {
@@ -109,37 +108,6 @@ pub fn extract_info(article_history: &Template) -> Result<Option<ArticleHistory>
 pub type ExtractResultMulti = Result<Option<Vec<ParameterType>>>;
 pub type ExtractResultSingle = Result<Option<ParameterType>>;
 
-pub fn extract_dyk(t: &Template) -> ExtractResultSingle {
-    let mut date = None;
-    let mut year = None;
-    let mut entry = None;
-    let mut nom = None;
-    for (name, val) in t.params() {
-        match &*name {
-            "1" => date = Some(val),
-            "2" if val.chars().all(|c| c.is_ascii_digit()) => year = Some(val),
-            "2" | "entry" => entry = Some(val),
-            "nompage" => nom = Some(val),
-            // ignored parameters
-            "views" | "article" | "small" | "3" | "image" => {}
-            _ => {
-                warn!(?name, "unrecognized parameter");
-                return Ok(None);
-            }
-        }
-    }
-
-    let date = date.map(|date| {
-        if let Some(year) = year {
-            format!("{date} {year}")
-        } else {
-            date
-        }
-    });
-
-    Ok(Some(ParameterType::Dyk { date, entry, nom }))
-}
-
 pub fn extract_otd(t: &Template) -> ExtractResultMulti {
     #[derive(Default)]
     pub struct Otd {
@@ -208,27 +176,4 @@ pub fn extract_itn(t: &Template) -> ExtractResultMulti {
             .map(|Itn { date }| ParameterType::Itn { date, link: None })
             .collect(),
     ))
-}
-
-pub fn extract_failed_ga(t: &Template) -> ExtractResultSingle {
-    let mut date = None;
-    let mut oldid = None;
-    let mut page = None;
-    let mut topic = None;
-    for (param, value) in t.params() {
-        match &*param {
-            "1" | "date" => date = Some(value),
-            "topic" => topic = Some(value),
-            "page" => page = Some(value),
-            "oldid" => oldid = Some(value),
-            // Ignore
-            "small" => {}
-            _ => {
-                warn!(?param, "unrecognized parameter");
-                return Ok(None);
-            }
-        }
-    }
-
-    todo!()
 }

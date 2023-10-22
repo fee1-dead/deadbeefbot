@@ -1,18 +1,19 @@
 use serde::Deserialize;
 
-use crate::articlehistory::PreserveDate;
-use crate::articlehistory::{self as ah, ArticleHistory};
-
 use super::{ExtractContext, Extractor};
+use crate::articlehistory::{self as ah, ArticleHistory, PreserveDate};
 
 pub struct DykExtractor;
 
 #[derive(Deserialize, Debug)]
 #[serde(deny_unknown_fields)]
 pub struct Dyk {
-    pub date: PreserveDate,
+    #[serde(rename = "1")]
+    pub date: String,
+    #[serde(alias = "2")]
+    pub two: Option<String>,
     pub entry: Option<String>,
-    pub nom: Option<String>,
+    pub nompage: Option<String>,
 }
 
 impl Extractor for DykExtractor {
@@ -27,10 +28,33 @@ impl Extractor for DykExtractor {
         value: Dyk,
         into: &mut ArticleHistory,
     ) {
+        let (date, entry, nom) = match value {
+            Dyk {
+                two: Some(year),
+                entry: Some(entry),
+                date,
+                nompage,
+            } if year.chars().all(|c| c.is_ascii_digit()) => {
+                let date = format!("{date} {year}");
+                (date, Some(entry), nompage)
+            }
+            Dyk {
+                entry: None,
+                two: Some(entry),
+                nompage,
+                date,
+            } => (date, Some(entry), nompage),
+            Dyk {
+                date,
+                entry,
+                nompage,
+                ..
+            } => (date, entry, nompage),
+        };
         into.dyks.push(ah::Dyk {
-            date: value.date,
-            entry: value.entry,
-            nom: value.nom,
+            date: PreserveDate::try_from_string(date).unwrap(),
+            entry,
+            nom,
             ignoreerror: false,
         });
     }

@@ -6,7 +6,7 @@ use crate::articlehistory::{Action, ActionKind, ArticleHistory, PreserveDate};
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct Ga {
+pub struct FailedGa {
     #[serde(alias = "1")]
     pub date: Option<PreserveDate>,
     pub oldid: Option<String>,
@@ -16,16 +16,15 @@ pub struct Ga {
     pub page: Option<String>,
 }
 
-pub struct GaExtractor;
+pub struct FailedGaExtractor;
 
-impl Extractor for GaExtractor {
-    type Value = Ga;
-    /// https://en.wikipedia.org/wiki/Special:WhatLinksHere?target=Template%3AGA&namespace=&hidetrans=1&hidelinks=1
-    const ALIAS: &'static [&'static str] = &["ga"];
+impl Extractor for FailedGaExtractor {
+    type Value = FailedGa;
+    const ALIAS: &'static [&'static str] = &["failedga", "failed ga"];
     fn merge_value_into<'cx>(
         &self,
         _cx: super::ExtractContext<'cx>,
-        value: Ga,
+        value: FailedGa,
         into: &mut ArticleHistory,
     ) {
         if let Some(topic) = value.topic {
@@ -46,7 +45,7 @@ impl Extractor for GaExtractor {
             kind: ActionKind::Gan,
             date: value.date.unwrap(),
             link: Some(format!("/GA{page}")),
-            result: Some("listed".into()),
+            result: Some("failed".into()),
             oldid: value.oldid,
         })
     }
