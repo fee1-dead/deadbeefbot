@@ -263,6 +263,11 @@ pub struct Dyk {
 
 impl AddToParams for Dyk {
     fn add_to_params(self, i: NonZeroUsize, params: &mut ParamBuilder<'_>) {
+        let i = if i.get() == 1 {
+            String::new()
+        } else {
+            format!("{i}")
+        };
         params.add(format!("dyk{i}date"), self.date.orig);
         params.add_opt(format!("dyk{i}entry"), self.entry);
         params.add_opt(format!("dyk{i}nom"), self.nom);
