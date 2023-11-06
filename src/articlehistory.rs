@@ -573,7 +573,7 @@ pub async fn treat(
         return Ok(());
     };
 
-    let cx = ExtractContext { client, parsoid };
+    let cx = ExtractContext { client, parsoid, title };
 
     info!("Extracting [[{title}]], rev: {rev}, AH: {ah:#?}");
 

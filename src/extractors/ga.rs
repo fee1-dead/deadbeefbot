@@ -24,7 +24,7 @@ impl Extractor for GaExtractor {
     const ALIAS: &'static [&'static str] = &["ga"];
     fn merge_value_into<'cx>(
         &self,
-        _cx: super::ExtractContext<'cx>,
+        cx: super::ExtractContext<'cx>,
         value: Ga,
         into: &mut ArticleHistory,
     ) {
@@ -42,10 +42,11 @@ impl Extractor for GaExtractor {
             warn!("no page");
             return;
         };
+        let title = cx.title;
         into.actions.push(Action {
             kind: ActionKind::Gan,
             date: value.date.unwrap(),
-            link: Some(format!("/GA{page}")),
+            link: Some(format!("{title}/GA{page}")),
             result: Some("listed".into()),
             oldid: value.oldid,
         })

@@ -17,6 +17,7 @@ mod otd;
 pub struct ExtractContext<'cx> {
     pub client: &'cx Bot,
     pub parsoid: &'cx parsoid::Client,
+    pub title: &'cx str,
 }
 
 pub fn simple_extract<T: DeserializeOwned>(t: &Template) -> Result<T> {
