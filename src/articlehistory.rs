@@ -243,11 +243,11 @@ impl Action {
 
 impl AddToParams for Action {
     fn add_to_params(self, i: NonZeroUsize, params: &mut ParamBuilder<'_>) {
-        params.add(format!("action{i}"), self.kind.as_str());
-        params.add(format!("action{i}date"), self.date.orig);
-        params.add_opt(format!("action{i}link"), self.link);
-        params.add_opt(format!("action{i}result"), self.result);
-        params.add_opt(format!("action{i}oldid"), self.oldid);
+        params.addnl(format!("action{i}"), self.kind.as_str());
+        params.addnl(format!("action{i}date"), self.date.orig);
+        params.addnl_opt(format!("action{i}link"), self.link);
+        params.addnl_opt(format!("action{i}result"), self.result);
+        params.addnl_opt(format!("action{i}oldid"), self.oldid);
         params.newline()
     }
 }
@@ -267,6 +267,7 @@ impl AddToParams for Dyk {
         params.add_opt(format!("dyk{i}entry"), self.entry);
         params.add_opt(format!("dyk{i}nom"), self.nom);
         params.add_flag(format!("dyk{i}ignoreerror"), self.ignoreerror);
+        params.newline();
     }
 }
 
@@ -280,6 +281,7 @@ impl AddToParams for Itn {
     fn add_to_params(self, i: NonZeroUsize, params: &mut ParamBuilder<'_>) {
         params.add(format!("itn{i}date"), self.date.orig);
         params.add_opt(format!("itn{i}link"), self.link);
+        params.newline();
     }
 }
 
@@ -295,6 +297,7 @@ impl AddToParams for Otd {
         params.add(format!("otd{i}date"), self.date.orig);
         params.add_opt(format!("otd{i}oldid"), self.oldid);
         params.add_opt(format!("otd{i}link"), self.link);
+        params.newline();
     }
 }
 
@@ -312,8 +315,8 @@ impl AddToParams for FeaturedTopic {
         } else {
             format!("{i}")
         };
-        params.add(format!("ft{i}name"), self.name);
-        params.add_flag(format!("ft{i}main"), self.main);
+        params.addnl(format!("ft{i}name"), self.name);
+        params.addnl_flag(format!("ft{i}main"), self.main);
     }
 }
 
@@ -387,17 +390,17 @@ impl ArticleHistory {
         let mut builder = ParamBuilder::new(&mut params);
 
         builder.add_all(self.actions);
-        builder.add_opt("currentstatus", self.currentstatus);
-        builder.add_opt("maindate", self.maindate.map(|x| x.orig));
-        builder.add_opt("maindate2", self.maindate2.map(|x| x.orig));
+        builder.addnl_opt("currentstatus", self.currentstatus);
+        builder.addnl_opt("maindate", self.maindate.map(|x| x.orig));
+        builder.addnl_opt("maindate2", self.maindate2.map(|x| x.orig));
         builder.add_all(self.itns);
         builder.add_all(self.dyks);
         builder.add_all(self.otds);
-        builder.add_flag("four", self.four);
+        builder.addnl_flag("four", self.four);
         builder.add_all(self.featured_topics);
-        builder.add_opt("topic", self.topic);
-        builder.add_flag("collapse", self.collapse);
-        builder.add_flag("small", self.small);
+        builder.addnl_opt("topic", self.topic);
+        builder.addnl_flag("collapse", self.collapse);
+        builder.addnl_flag("small", self.small);
 
         t.set_params(params)?;
 
