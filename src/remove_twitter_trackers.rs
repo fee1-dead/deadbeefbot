@@ -73,7 +73,7 @@ const SUPPORTED_SITES: &[SiteCfg] = &[
             )
         },
     },
-    /*SiteCfg {
+    SiteCfg {
         name: "Chinese Wikipedia",
         api_url: "https://zh.wikipedia.org/w/api.php",
         parsoid_url: "https://zh.wikipedia.org/api/rest_v1",
@@ -84,7 +84,7 @@ const SUPPORTED_SITES: &[SiteCfg] = &[
             format!("BOT：已从{links_fixed}个Twitter外链删除追踪参数，同时修改{wayback_links_fixed}个存档链接 \
             ([[Wikipedia:机器人/申请/DeadbeefBot|BRFA]])")
         },
-    },*/
+    },
 ];
 
 async fn run(site: &SiteCfg) -> color_eyre::Result<()> {
