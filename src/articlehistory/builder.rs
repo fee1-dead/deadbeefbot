@@ -41,7 +41,11 @@ impl<'a> ParamBuilder<'a> {
         self
     }
 
-    pub fn add_opt(&mut self, key: impl Into<String>, value: Option<impl Into<String>>) -> &mut Self {
+    pub fn add_opt(
+        &mut self,
+        key: impl Into<String>,
+        value: Option<impl Into<String>>,
+    ) -> &mut Self {
         if let Some(value) = value {
             self.add(key, value);
         }

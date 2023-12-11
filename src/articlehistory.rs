@@ -35,7 +35,6 @@ const AH: &[&str] = &[
     "articlehistory",
 ];
 
-
 /// https://en.wikipedia.org/wiki/Special:WhatLinksHere?target=Template%3AITN+talk&namespace=&hidetrans=1&hidelinks=1
 const ITN: &[&str] = &["itn talk", "itntalk"];
 
@@ -573,7 +572,11 @@ pub async fn treat(
         return Ok(());
     };
 
-    let cx = ExtractContext { client, parsoid, title };
+    let cx = ExtractContext {
+        client,
+        parsoid,
+        title,
+    };
 
     info!("Extracting [[{title}]], rev: {rev}, AH: {ah:#?}");
 

@@ -106,7 +106,6 @@ pub fn extract_info(article_history: &Template) -> Result<Option<ArticleHistory>
 pub type ExtractResultMulti = Result<Option<Vec<ParameterType>>>;
 pub type ExtractResultSingle = Result<Option<ParameterType>>;
 
-
 pub fn extract_itn(t: &Template) -> ExtractResultMulti {
     #[derive(Default, PartialEq, Eq, PartialOrd, Ord)]
     pub struct Itn {

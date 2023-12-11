@@ -185,58 +185,78 @@ async fn run(site: &SiteCfg) -> color_eyre::Result<()> {
                         return Ok(());
                     }
 
-                    // https://web.archive.org/web/20220624234724/https://twitter.com/MariahCarey/status/1314585670644641794
-                    let url = format!("https://web.archive.org/web/{timestamp}/{new_url}");
-                    let resp = c.get(&url).send().await?;
+                    // https://web.archive.org/web/timemap/?url=https://twitter.com/MariahCarey/status/1314585670644641794&collapse=timestamp&fl=timestamp
+                    let url = Url::parse_with_params(
+                        "https://web.archive.org/web/timemap/",
+                        [
+                            ("url", &*new_url),
+                            ("collapse", "timestamp"),
+                            ("fl", "timestamp"),
+                        ],
+                    )?;
+                    let resp = c.get(url).timeout(Duration::from_secs(4)).send().await?;
                     debug!(?resp);
-                    // x-archive-redirect-reason: found capture at 20220624234724
-                    // location https://web.archive.org/web/20220624234724/https://twitter.com/MariahCarey/status/1314585670644641794
-                    let mut actual_url = url;
-                    if resp.status().as_u16() == 302
-                        && resp
-                            .headers()
-                            .get("x-archive-redirect-reason")
-                            .and_then(|v| v.to_str().ok())
-                            .map_or(false, |s| s.starts_with("found capture at"))
-                    {
-                        resp.headers()
-                            .get("location")
-                            .and_then(|v| v.to_str().ok())
-                            .map(|v| actual_url = v.to_owned())
-                            .context("location")?;
+                    let resp = resp.error_for_status()?;
+                    let timestamps = resp.text().await?;
+
+                    for new_timestamp in timestamps.lines() {
+                        // https://web.archive.org/web/20220624234724/https://twitter.com/MariahCarey/status/1314585670644641794
+                        let actual_url =
+                            format!("https://web.archive.org/web/{new_timestamp}/{new_url}");
+                        debug!(?timestamp, ?actual_url);
+
+                        let res = (|| async {
+                            let text = c
+                                .get(&actual_url)
+                                .send()
+                                .await?
+                                .error_for_status()?
+                                .text()
+                                .await?;
+                            let html = kuchiki::parse_html().one(text);
+
+                            let title = html
+                                .select_first("title")
+                                .map(|t| t.text_contents())
+                                .map_err(|_| eyre!("title"))?;
+                            if title.trim() == "Twitter" {
+                                Err(eyre!("buggy url"))?;
+                            }
+
+                            let _ = html
+                                .select_first("[aria-label=\"Timeline: Conversation\"]")
+                                .map_err(|_| eyre!("main content"))?;
+
+                            let time = wre
+                                .captures(&actual_url)?
+                                .and_then(|c| c.get(1))
+                                .context("url should match regex")?
+                                .as_str();
+
+                            let time = NaiveDateTime::parse_from_str(time, "%Y%m%d%H%M%S")?;
+
+                            let date = time.format("%Y-%m-%d");
+                            template.set_param("archive-url", &actual_url).unwrap();
+                            template
+                                .set_param("archive-date", &date.to_string())
+                                .unwrap();
+                            color_eyre::Result::<()>::Ok(())
+                        })()
+                        .await;
+
+                        match res {
+                            Ok(()) => {
+                                edit_msg.wayback_links_fixed += 1;
+                                break;
+                            }
+                            Err(e) => {
+                                debug!("did not fix: {}", e.to_string());
+                                // prevent spamming archive.org
+                                tokio::time::sleep(Duration::from_secs(2)).await;
+                            }
+                        }
                     }
 
-                    let text = c
-                        .get(&actual_url)
-                        .send()
-                        .await?
-                        .error_for_status()?
-                        .text()
-                        .await?;
-                    let html = kuchiki::parse_html().one(text);
-
-                    let title = html
-                        .select_first("title")
-                        .map(|t| t.text_contents())
-                        .map_err(|_| eyre!("title"))?;
-                    if title.trim() == "Twitter" {
-                        Err(eyre!("buggy url"))?;
-                    }
-
-                    let time = wre
-                        .captures(&actual_url)?
-                        .and_then(|c| c.get(1))
-                        .context("url should match regex")?
-                        .as_str();
-
-                    let time = NaiveDateTime::parse_from_str(time, "%Y%m%d%H%M%S")?;
-
-                    let date = time.format("%Y-%m-%d");
-                    template.set_param("archive-url", &actual_url).unwrap();
-                    template
-                        .set_param("archive-date", &date.to_string())
-                        .unwrap();
-                    edit_msg.wayback_links_fixed += 1;
                     Ok(())
                 })()
                 .await;
