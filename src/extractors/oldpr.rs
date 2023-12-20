@@ -1,5 +1,6 @@
 use color_eyre::eyre::bail;
 use serde::Deserialize;
+use tracing::debug;
 
 use super::{ExtractContext, Extractor};
 use crate::articlehistory::{Action, ActionKind, ArticleHistory, PreserveDate};
@@ -8,9 +9,10 @@ use crate::articlehistory::{Action, ActionKind, ArticleHistory, PreserveDate};
 #[serde(deny_unknown_fields)]
 pub struct OldPeerReview {
     // Default: 1
-    pub archive: Option<u64>,
+    pub archive: Option<String>,
     pub reviewedname: Option<String>,
     pub archivelink: Option<String>,
+    #[serde(rename = "ID")]
     pub id: Option<String>,
     pub date: PreserveDate,
 }
@@ -41,15 +43,18 @@ impl Extractor for OldPrExtractor {
             format!(
                 "Wikipedia:Peer review/{}/archive{}",
                 value.reviewedname.as_deref().unwrap_or(title),
-                value.archive.unwrap_or(1)
+                value.archive.unwrap_or_else(|| "1".into())
             )
         };
+        let url = format!(
+            "https://en.wikipedia.org/w/rest.php/v1/page/{}/history/counts/edits",
+            urlencoding::encode(&link.replace(' ', "_")),
+        );
+        debug!(?url);
         let res = cx
             .client
             .client
-            .get(format!(
-                "https://en.wikipedia.org/w/rest.php/v1/page/{link}/history/counts/edits"
-            ))
+            .get(url)
             .send()
             .await?
             .error_for_status()?

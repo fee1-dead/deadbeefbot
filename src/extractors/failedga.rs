@@ -30,7 +30,7 @@ impl Extractor for FailedGaExtractor {
     ) -> crate::Result<()> {
         if let Some(topic) = value.topic {
             if let Some(topic2) = &into.topic {
-                if topic2 != &topic {
+                if !topic2.eq_ignore_ascii_case(&topic) {
                     warn!("topic mismatch");
                     bail!("topic mismatch");
                 }

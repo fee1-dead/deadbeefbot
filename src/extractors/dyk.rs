@@ -11,10 +11,14 @@ pub struct DykExtractor;
 pub struct Dyk {
     #[serde(rename = "1")]
     pub date: String,
-    #[serde(alias = "2")]
+    #[serde(rename = "2")]
     pub two: Option<String>,
+    #[serde(rename = "3")]
+    pub three: Option<String>,
     pub entry: Option<String>,
     pub nompage: Option<String>,
+    /// ignored
+    pub views: Option<String>,
 }
 
 impl Extractor for DykExtractor {
@@ -32,24 +36,30 @@ impl Extractor for DykExtractor {
         let (date, entry, nom) = match value {
             Dyk {
                 two: Some(year),
-                entry: Some(entry),
+                entry,
+                three,
                 date,
                 nompage,
+                views: _,
             } if year.chars().all(|c| c.is_ascii_digit()) => {
                 let date = format!("{date} {year}");
-                (date, Some(entry), nompage)
+                (date, entry.or(three), nompage)
             }
             Dyk {
                 entry: None,
                 two: Some(entry),
+                three: _,
                 nompage,
                 date,
+                views: _,
             } => (date, Some(entry), nompage),
             Dyk {
                 date,
                 entry,
                 nompage,
-                ..
+                views: _,
+                three: _,
+                two: _,
             } => (date, entry, nompage),
         };
         into.dyks.push(ah::Dyk {

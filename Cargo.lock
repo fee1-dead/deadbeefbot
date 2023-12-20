@@ -771,6 +771,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "url",
+ "urlencoding",
  "wiki",
 ]
 

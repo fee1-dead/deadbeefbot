@@ -2,7 +2,6 @@
 
 use std::io::stdin;
 use std::num::NonZeroUsize;
-use std::ops::ControlFlow;
 use std::process;
 
 use chrono::{DateTime, TimeZone, Utc};
@@ -23,8 +22,8 @@ use crate::{check_nobots, enwiki_bot, enwiki_parsoid, Result};
 #[allow(unused_imports)]
 use crate::{parsoid_from_url, site_from_url};
 
-mod extract;
 mod builder;
+mod extract;
 
 use builder::{AddToParams, ParamBuilder};
 
@@ -224,7 +223,7 @@ impl Action {
             (Fpor, Some("removed")) => Ok(Some("FFPO")),
             (Fpor, _) => bail!("unknown fpor"),
 
-            (Gan, Some("listed")) => Ok(Some("GA")),
+            (Gan, Some("listed" | "promoted" | "passed")) => Ok(Some("GA")),
             (Gan, Some("failed")) => Ok(Some("FGAN")),
             (Gan, _) => bail!("unknown gan"),
 
@@ -351,33 +350,61 @@ pub struct ArticleHistory {
 impl ArticleHistory {
     pub fn sort_and_update_status(&mut self) -> Result<()> {
         self.actions.sort_by_key(|action| action.date.date);
-        let status =
-            self.actions
-                .iter()
-                .try_rfold(ControlFlow::Continue(()), |x, action| -> Result<_> {
-                    if let ControlFlow::Break(br) = x {
-                        return Ok(ControlFlow::Break(br));
+        let status = self
+            .actions
+            .iter()
+            .filter_map(|action| action.opt_to_current_status().transpose())
+            .collect::<Result<Vec<_>>>()?;
+        let status = {
+            let mut s = String::new();
+            let mut status = status;
+            status.reverse();
+            info!(?status, "status before");
+            {
+                // take most recent GA-related status
+                let mut found_ga = false;
+                status.retain(|x| match *x {
+                    "GA" | "FGAN" | "DGA" if found_ga => false,
+                    "GA" | "FGAN" | "DGA" => {
+                        found_ga = true;
+                        true
                     }
-                    if let Some(stat) = action.opt_to_current_status()? {
-                        Ok(ControlFlow::Break(stat))
-                    } else {
-                        Ok(ControlFlow::Continue(()))
-                    }
-                })?;
-        match status {
-            ControlFlow::Break(status) => {
-                if self.currentstatus.as_ref().is_some_and(|x| x != status) {
-                    bail!(
-                        "current status mismatch: {:?} vs {:?}",
-                        self.currentstatus,
-                        status
-                    )
-                }
-
-                self.currentstatus = Some(status.into())
+                    _ => true,
+                });
             }
-            ControlFlow::Continue(()) => {}
+            {
+                // take most recent "featured"-related status
+                let mut found_fa = false;
+                status.retain(|x| match *x {
+                    "FGAN" => true,
+                    s if s.starts_with('F') && found_fa => false,
+                    s if s.starts_with('F') => {
+                        found_fa = true;
+                        true
+                    }
+                    _ => true,
+                });
+            }
+            info!(?status, "status after");
+
+            // most recent action first
+            for status in status {
+                if !s.is_empty() {
+                    s.push('/');
+                }
+                s.push_str(status);
+            }
+            s
+        };
+        if self.currentstatus.as_ref().is_some_and(|x| x != &status) {
+            bail!(
+                "current status mismatch: {:?} vs {:?}",
+                self.currentstatus,
+                status
+            )
         }
+
+        self.currentstatus = Some(status.into());
         Ok(())
     }
 
@@ -409,7 +436,6 @@ impl ArticleHistory {
     }
 }
 
-
 pub async fn treat(
     client: &wiki::Bot,
     parsoid: &parsoid::Client,
@@ -437,11 +463,11 @@ pub async fn treat(
         }
         None => {
             // mount an article history template.
+            let banner_shell_aliases = include_str!("banneralias.txt");
             let Some(banner) = templates.iter().find(|x| {
-                x.name()
-                    .trim_start_matches("Template:")
-                    .to_ascii_lowercase()
-                    == "wikiproject banner shell"
+                banner_shell_aliases
+                    .lines()
+                    .any(|name| name == x.name().trim_start_matches("Template:"))
             }) else {
                 warn!("skipping, article doesn't have wp banner shell");
                 return Ok(());
@@ -521,7 +547,7 @@ pub async fn treat(
                 client
                     .build_edit(PageSpec::Title(title.to_owned()))
                     .text(text)
-                    .summary("merged OTD/ITN/DYK templates to {{article history}} ([[Wikipedia:Bots/Requests for approval/DeadbeefBot 2|BRFA]])")
+                    .summary("merged OTD/ITN/DYK templates to {{article history}} ([[Wikipedia:Bots/Requests for approval/DeadbeefBot 3|BRFA]]) (in trial)")
                     .baserevid(rev as u32)
                     .minor()
                     .bot()
@@ -537,7 +563,7 @@ pub async fn treat(
         client
             .build_edit(PageSpec::Title(title.to_owned()))
             .text(text)
-            .summary("merged OTD/ITN/DYK templates to {{article history}} ([[Wikipedia:Bots/Requests for approval/DeadbeefBot 2|BRFA]])")
+            .summary("merged OTD/ITN/DYK templates to {{article history}} ([[Wikipedia:Bots/Requests for approval/DeadbeefBot 3|BRFA]]) (in trial)")
             .baserevid(rev as u32)
             .minor()
             .bot()
@@ -550,15 +576,16 @@ pub async fn treat(
 
 pub async fn main() -> Result<()> {
     // TODO testing mode, we be sampling!
-    let pages = reqwest::get("https://petscan.wmflabs.org/?psid=26653654&format=plain")
+    let pages = reqwest::get("https://petscan.wmflabs.org/?psid=26656796&format=plain")
         .await?
+        .error_for_status()?
         .text()
         .await?;
     let pages: Vec<_> = pages.lines().collect();
     debug!("got {} pages from petscan", pages.len());
 
-    let pages = pages.choose_multiple(&mut thread_rng(), 10);
-    // let pages = vec!["Talk:Ebla"];
+    let pages = pages.choose_multiple(&mut thread_rng(), 9);
+    // let pages = vec!["Talk:Reign of Cleopatra"];
 
     // let client = site_from_url("https://test.wikipedia.org/w/api.php").await?;
     let client = enwiki_bot().await?;
@@ -567,7 +594,7 @@ pub async fn main() -> Result<()> {
     let parsoid = enwiki_parsoid()?;
 
     for page in pages {
-        treat(&client, &parsoid, page, true).await?;
+        treat(&client, &parsoid, page, false).await?;
         tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
     }
 
