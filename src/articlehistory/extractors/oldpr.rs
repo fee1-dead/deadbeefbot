@@ -63,7 +63,9 @@ impl Extractor for OldPrExtractor {
             .await?;
         let result = if res.count < 10 {
             if cx.allow_interactive {
-                println!("is this peer review reviewed? (https://en.wikipedia.org/wiki/{title}) [y/n/q]");
+                println!(
+                    "is this peer review reviewed? (https://en.wikipedia.org/wiki/{title}) [y/n/q]"
+                );
                 match stdin()
                     .lines()
                     .next()

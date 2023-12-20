@@ -9,8 +9,6 @@ use wiki::req::search::SearchGenerator;
 use wiki::req::{self, Query, QueryGenerator};
 use wiki::ClientBuilder;
 
-mod extractors;
-
 const UA: &str = concat!(
     "DeadbeefBot/",
     env!("CARGO_PKG_VERSION"),

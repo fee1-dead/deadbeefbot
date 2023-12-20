@@ -7,12 +7,15 @@ use wiki::Bot;
 use crate::articlehistory::ArticleHistory;
 use crate::Result;
 
+mod articlehistory;
 mod dyk;
 mod failedga;
 mod ga;
 mod itn;
 mod oldpr;
 mod otd;
+
+pub use articlehistory::ArticleHistoryExtractor;
 
 #[derive(Clone, Copy, Debug)]
 pub struct ExtractContext<'cx> {
