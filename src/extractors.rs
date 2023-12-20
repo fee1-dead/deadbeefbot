@@ -19,6 +19,7 @@ pub struct ExtractContext<'cx> {
     pub client: &'cx Bot,
     pub parsoid: &'cx parsoid::Client,
     pub title: &'cx str,
+    pub allow_interactive: bool,
 }
 
 pub fn simple_extract<T: DeserializeOwned>(t: &Template) -> Result<T> {
@@ -100,10 +101,7 @@ pub async fn extract_all<'cx>(
             if e.is_extractable(t) {
                 debug!("extracted through `{}`", stringify!($v));
                 let val = e.extract(t)?;
-                if let Err(e) = e.merge_value_into(cx, val, ah).await {
-                    tracing::warn!(?e, "skipped");
-                    return Ok(())
-                }
+                e.merge_value_into(cx, val, ah).await?;
                 detach_template(t);
                 return Ok(());
             }

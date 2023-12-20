@@ -189,46 +189,48 @@ impl Action {
     /// Extract current status based on this table: https://en.wikipedia.org/wiki/Template:Article_history#How_to_use_in_practice
     ///
     /// If this returns Err then we've got our assumptions wrong and this page is untreatable.
+    ///
+    /// See also https://en.wikipedia.org/wiki/Module:Article_history/config#L-1112
     pub fn opt_to_current_status(&self) -> Result<Option<&'static str>> {
         use ActionKind::*;
         let res = self.result.as_deref().map(str::to_ascii_lowercase);
         match (self.kind, res.as_deref()) {
-            (Fac, Some("promoted")) => Ok(Some("FA")),
-            (Fac, Some("failed")) => Ok(Some("FFAC")),
+            (Fac, Some("promoted" | "pass" | "passed")) => Ok(Some("FA")),
+            (Fac, Some("not promoted" | "fail" | "failed")) => Ok(Some("FFAC")),
             (Fac, _) => bail!("unknown fac"),
 
-            (Far, Some("kept")) => Ok(Some("FA")),
-            (Far, Some("removed")) => Ok(Some("FFA")),
+            (Far, Some("kept" | "pass" | "passed" | "keep")) => Ok(Some("FA")),
+            (Far, Some("demoted" | "removed" | "remove" | "fail" | "failed")) => Ok(Some("FFA")),
             (Far, _) => bail!("unknown far"),
 
             (Rbp, _) => bail!("idk how to deal with rbp"),
             (Bp, _) => Ok(None),
 
-            (Flc, Some("promoted")) => Ok(Some("FL")),
-            (Flc, Some("failed")) => Ok(Some("FFLC")),
+            (Flc, Some("promoted" | "pass" | "passed")) => Ok(Some("FL")),
+            (Flc, Some("not promoted" | "fail" | "failed")) => Ok(Some("FFLC")),
             (Flc, _) => bail!("unknown flc"),
 
-            (Flr, Some("kept")) => Ok(Some("FL")),
-            (Flr, Some("removed")) => Ok(Some("FFL")),
+            (Flr, Some("kept" | "pass" | "passed" | "keep")) => Ok(Some("FL")),
+            (Flr, Some("demoted" | "removed" | "remove" | "fail" | "failed")) => Ok(Some("FFL")),
             (Flr, _) => bail!("unknown flr"),
 
             (Ftc, _) => Ok(None),
             (Ftr, _) => Ok(None),
 
-            (Fproc, Some("promoted")) => Ok(Some("FPO")),
-            (Fproc, Some("failed")) => Ok(Some("FFPOC")),
+            (Fproc, Some("promoted" | "pass" | "passed")) => Ok(Some("FPO")),
+            (Fproc, Some("not promoted" | "fail" | "failed")) => Ok(Some("FFPOC")),
             (Fproc, _) => bail!("unknown fproc"),
 
-            (Fpor, Some("kept")) => Ok(Some("FPO")),
-            (Fpor, Some("removed")) => Ok(Some("FFPO")),
+            (Fpor, Some("kept" | "pass" | "passed" | "keep")) => Ok(Some("FPO")),
+            (Fpor, Some("demoted" | "removed" | "remove" | "fail" | "failed")) => Ok(Some("FFPO")),
             (Fpor, _) => bail!("unknown fpor"),
 
-            (Gan, Some("listed" | "promoted" | "passed")) => Ok(Some("GA")),
-            (Gan, Some("failed")) => Ok(Some("FGAN")),
+            (Gan, Some("promoted" | "pass" | "passed")) => Ok(Some("GA")),
+            (Gan, Some("not promoted" | "fail" | "failed")) => Ok(Some("FGAN")),
             (Gan, _) => bail!("unknown gan"),
 
-            (Gar, Some("kept" | "listed")) => Ok(Some("GA")),
-            (Gar, Some("delisted")) => Ok(Some("DGA")),
+            (Gar, Some("kept" | "pass" | "passed" | "keep")) => Ok(Some("GA")),
+            (Gar, Some("delisted" | "fail" | "failed")) => Ok(Some("DGA")),
             (Gar, _) => bail!("unknown gar"),
 
             (Gtc | Pr | Wpr | War | Afd | Mfd | Tfd | Csd | Prod | Drv, _) => Ok(None),
@@ -396,7 +398,14 @@ impl ArticleHistory {
             }
             s
         };
-        if self.currentstatus.as_ref().is_some_and(|x| x != &status) {
+        if status.contains('/') && !["FFA/GA", "FFAC/GA"].contains(&&*status) {
+            bail!("multi-status is invalid: {status}");
+        }
+        if self.currentstatus.as_ref().is_some_and(|orig_status| {
+            // either they have to completely match, or our status is more specific
+            // than the previous status
+            orig_status != &status && !status.contains(&format!("/{orig_status}"))
+        }) {
             bail!(
                 "current status mismatch: {:?} vs {:?}",
                 self.currentstatus,
@@ -495,6 +504,8 @@ pub async fn treat(
         client,
         parsoid,
         title,
+        // TODO fix this
+        allow_interactive: true,
     };
 
     info!("Extracting [[{title}]], rev: {rev}, AH: {ah:#?}");
@@ -576,7 +587,7 @@ pub async fn treat(
 
 pub async fn main() -> Result<()> {
     // TODO testing mode, we be sampling!
-    let pages = reqwest::get("https://petscan.wmflabs.org/?psid=26656796&format=plain")
+    let pages = reqwest::get("https://petscan.wmflabs.org/?psid=26657648&format=plain")
         .await?
         .error_for_status()?
         .text()
@@ -584,7 +595,7 @@ pub async fn main() -> Result<()> {
     let pages: Vec<_> = pages.lines().collect();
     debug!("got {} pages from petscan", pages.len());
 
-    let pages = pages.choose_multiple(&mut thread_rng(), 9);
+    let pages = pages.choose_multiple(&mut thread_rng(), 4);
     // let pages = vec!["Talk:Reign of Cleopatra"];
 
     // let client = site_from_url("https://test.wikipedia.org/w/api.php").await?;

@@ -1,6 +1,8 @@
-use color_eyre::eyre::bail;
+use std::io::stdin;
+
+use color_eyre::eyre::{bail, eyre};
 use serde::Deserialize;
-use tracing::debug;
+use serde_json::Value;
 
 use super::{ExtractContext, Extractor};
 use crate::articlehistory::{Action, ActionKind, ArticleHistory, PreserveDate};
@@ -14,7 +16,7 @@ pub struct OldPeerReview {
     pub archivelink: Option<String>,
     #[serde(rename = "ID")]
     pub id: Option<String>,
-    pub date: PreserveDate,
+    pub date: Option<PreserveDate>,
 }
 
 pub struct OldPrExtractor;
@@ -46,11 +48,10 @@ impl Extractor for OldPrExtractor {
                 value.archive.unwrap_or_else(|| "1".into())
             )
         };
-        let url = format!(
-            "https://en.wikipedia.org/w/rest.php/v1/page/{}/history/counts/edits",
-            urlencoding::encode(&link.replace(' ', "_")),
-        );
-        debug!(?url);
+        let normalized_link = link.replace(' ', "_");
+        let title = urlencoding::encode(&normalized_link);
+        let url =
+            format!("https://en.wikipedia.org/w/rest.php/v1/page/{title}/history/counts/edits");
         let res = cx
             .client
             .client
@@ -60,14 +61,50 @@ impl Extractor for OldPrExtractor {
             .error_for_status()?
             .json::<ApiResponse>()
             .await?;
-        if res.count < 10 {
-            bail!("can't determine if it was reviewed");
-        }
+        let result = if res.count < 10 {
+            if cx.allow_interactive {
+                println!("is this peer review reviewed? (https://en.wikipedia.org/wiki/{title}) [y/n/q]");
+                match stdin()
+                    .lines()
+                    .next()
+                    .transpose()?
+                    .as_deref()
+                    .map(str::trim)
+                    .map(str::to_ascii_lowercase)
+                    .as_deref()
+                {
+                    None => bail!("stdin is piped"),
+                    Some("y") => "Reviewed",
+                    Some("n") => "Not reviewed",
+                    Some(_) => bail!("unrecognized response"),
+                }
+            } else {
+                bail!("can't determine if it was reviewed");
+            }
+        } else {
+            "Reviewed"
+        };
+        let date = if let Some(date) = value.date {
+            date
+        } else {
+            let mut res = cx.client.client.get(format!("https://en.wikipedia.org/w/api.php?action=query&titles={title}&prop=revisions&rvlimit=1&rvprop=timestamp&format=json")).send().await?.error_for_status()?.json::<Value>().await?;
+            let val = res["query"]["pages"]
+                .as_object_mut()
+                .unwrap()
+                .values_mut()
+                .next()
+                .unwrap()["revisions"][0]["timestamp"]
+                .take();
+            let Value::String(s) = val else {
+                bail!("nonstr")
+            };
+            PreserveDate::try_from_string(s).map_err(|_| eyre!("nondate"))?
+        };
         into.actions.push(Action {
             kind: ActionKind::Pr,
             link: Some(link),
-            date: value.date,
-            result: Some("Reviewed".into()),
+            date,
+            result: Some(result.into()),
             oldid: value.id,
         });
         Ok(())
