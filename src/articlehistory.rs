@@ -10,6 +10,8 @@ use color_eyre::eyre::bail;
 use colored_diff::PrettyDifference;
 use parsoid::map::IndexMap;
 use parsoid::{Template, WikiMultinode, WikinodeIterator};
+use rand::seq::SliceRandom;
+use rand::thread_rng;
 use serde::Deserialize;
 use tracing::{debug, info, warn};
 use wiki::api::RequestBuilderExt;
@@ -547,14 +549,16 @@ pub async fn treat(
 }
 
 pub async fn main() -> Result<()> {
-    let pages = reqwest::get("https://petscan.wmflabs.org/?psid=24768643&format=plain")
+    // TODO testing mode, we be sampling!
+    let pages = reqwest::get("https://petscan.wmflabs.org/?psid=26653654&format=plain")
         .await?
         .text()
         .await?;
     let pages: Vec<_> = pages.lines().collect();
-    // let pages = vec!["Talk:Ebla"];
-
     debug!("got {} pages from petscan", pages.len());
+
+    let pages = pages.choose_multiple(&mut thread_rng(), 10);
+    // let pages = vec!["Talk:Ebla"];
 
     // let client = site_from_url("https://test.wikipedia.org/w/api.php").await?;
     let client = enwiki_bot().await?;
