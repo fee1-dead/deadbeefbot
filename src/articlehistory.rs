@@ -11,7 +11,7 @@ use colored_diff::PrettyDifference;
 use parsoid::map::IndexMap;
 use parsoid::{Template, WikiMultinode, WikinodeIterator};
 use serde::Deserialize;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 use wiki::api::RequestBuilderExt;
 use wiki::req::parse::{Parse, ParseProp};
 use wiki::req::{self, PageSpec};
@@ -34,9 +34,6 @@ const AH: &[&str] = &[
     "articlemilestones",
     "articlehistory",
 ];
-
-/// https://en.wikipedia.org/wiki/Special:WhatLinksHere?target=Template%3AITN+talk&namespace=&hidetrans=1&hidelinks=1
-const ITN: &[&str] = &["itn talk", "itntalk"];
 
 #[derive(Clone, Debug)]
 pub struct PreserveDate {
@@ -230,12 +227,9 @@ impl Action {
 
             (Gar, Some("kept" | "listed")) => Ok(Some("GA")),
             (Gar, Some("delisted")) => Ok(Some("DGA")),
+            (Gar, _) => bail!("unknown gar"),
 
             (Gtc | Pr | Wpr | War | Afd | Mfd | Tfd | Csd | Prod | Drv, _) => Ok(None),
-
-            _ => {
-                todo!()
-            }
         }
     }
 }
@@ -551,6 +545,7 @@ pub async fn treat(
                     .to_ascii_lowercase()
                     == "wikiproject banner shell"
             }) else {
+                warn!("skipping, article doesn't have wp banner shell");
                 return Ok(());
             };
 

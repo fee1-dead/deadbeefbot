@@ -1,3 +1,4 @@
+use color_eyre::eyre::bail;
 use serde::Deserialize;
 use tracing::warn;
 
@@ -21,17 +22,17 @@ pub struct FailedGaExtractor;
 impl Extractor for FailedGaExtractor {
     type Value = FailedGa;
     const ALIAS: &'static [&'static str] = &["failedga", "failed ga"];
-    fn merge_value_into<'cx>(
+    async fn merge_value_into<'cx>(
         &self,
         _cx: super::ExtractContext<'cx>,
         value: FailedGa,
         into: &mut ArticleHistory,
-    ) {
+    ) -> crate::Result<()> {
         if let Some(topic) = value.topic {
             if let Some(topic2) = &into.topic {
                 if topic2 != &topic {
                     warn!("topic mismatch");
-                    return;
+                    bail!("topic mismatch");
                 }
             }
 
@@ -39,7 +40,7 @@ impl Extractor for FailedGaExtractor {
         }
         let Some(page) = value.page else {
             warn!("no page");
-            return;
+            bail!("no page");
         };
         into.actions.push(Action {
             kind: ActionKind::Gan,
@@ -47,6 +48,7 @@ impl Extractor for FailedGaExtractor {
             link: Some(format!("/GA{page}")),
             result: Some("failed".into()),
             oldid: value.oldid,
-        })
+        });
+        Ok(())
     }
 }

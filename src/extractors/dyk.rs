@@ -2,6 +2,7 @@ use serde::Deserialize;
 
 use super::{ExtractContext, Extractor};
 use crate::articlehistory::{self as ah, ArticleHistory, PreserveDate};
+use crate::Result;
 
 pub struct DykExtractor;
 
@@ -22,12 +23,12 @@ impl Extractor for DykExtractor {
     /// https://en.wikipedia.org/wiki/Special:WhatLinksHere?target=Template%3ADYK+talk&namespace=&hidetrans=1&hidelinks=1
     const ALIAS: &'static [&'static str] = &["dyktalk", "dyk talk"];
 
-    fn merge_value_into<'cx>(
+    async fn merge_value_into<'cx>(
         &self,
         _cx: ExtractContext<'cx>,
         value: Dyk,
         into: &mut ArticleHistory,
-    ) {
+    ) -> Result<()> {
         let (date, entry, nom) = match value {
             Dyk {
                 two: Some(year),
@@ -57,5 +58,6 @@ impl Extractor for DykExtractor {
             nom,
             ignoreerror: false,
         });
+        Ok(())
     }
 }

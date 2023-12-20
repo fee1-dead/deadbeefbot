@@ -20,7 +20,7 @@ use crate::{
 };
 
 pub async fn main() -> color_eyre::Result<()> {
-    for site in SUPPORTED_SITES {
+    for site in SUPPORTED_SITES.into_iter().rev() {
         run(site).await?;
     }
     Ok(())
@@ -81,8 +81,15 @@ const SUPPORTED_SITES: &[SiteCfg] = &[
                      links_fixed,
                      wayback_links_fixed,
                  }| {
-            format!("BOT：已从{links_fixed}个Twitter外链删除追踪参数，同时修改{wayback_links_fixed}个存档链接 \
-            ([[Wikipedia:机器人/申请/DeadbeefBot|BRFA]])")
+            let wayback = if wayback_links_fixed != 0 {
+                format!("，同时修改{wayback_links_fixed}个存档链接")
+            } else {
+                String::new()
+            };
+            format!(
+                "BOT：已从{links_fixed}个Twitter外链删除追踪参数{wayback} \
+            ([[Wikipedia:机器人/申请/DeadbeefBot|BRFA]])"
+            )
         },
     },
 ];
@@ -194,7 +201,7 @@ async fn run(site: &SiteCfg) -> color_eyre::Result<()> {
                             ("fl", "timestamp"),
                         ],
                     )?;
-                    let resp = c.get(url).timeout(Duration::from_secs(4)).send().await?;
+                    let resp = c.get(url).timeout(Duration::from_secs(3)).send().await?;
                     debug!(?resp);
                     let resp = resp.error_for_status()?;
                     let timestamps = resp.text().await?;
@@ -206,8 +213,11 @@ async fn run(site: &SiteCfg) -> color_eyre::Result<()> {
                         debug!(?timestamp, ?actual_url);
 
                         let res = (|| async {
+                            // prevent spamming archive.org
+                            tokio::time::sleep(Duration::from_secs(2)).await;
                             let text = c
                                 .get(&actual_url)
+                                .timeout(Duration::from_secs(3))
                                 .send()
                                 .await?
                                 .error_for_status()?
@@ -225,6 +235,11 @@ async fn run(site: &SiteCfg) -> color_eyre::Result<()> {
 
                             let _ = html
                                 .select_first("[aria-label=\"Timeline: Conversation\"]")
+                                .or_else(|_| {
+                                    html.select_first(
+                                        ".tweet[data-tweet-stat-initialized=\"true\"]",
+                                    )
+                                })
                                 .map_err(|_| eyre!("main content"))?;
 
                             let time = wre
@@ -251,8 +266,6 @@ async fn run(site: &SiteCfg) -> color_eyre::Result<()> {
                             }
                             Err(e) => {
                                 debug!("did not fix: {}", e.to_string());
-                                // prevent spamming archive.org
-                                tokio::time::sleep(Duration::from_secs(2)).await;
                             }
                         }
                     }

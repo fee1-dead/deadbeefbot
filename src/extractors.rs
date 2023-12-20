@@ -10,6 +10,7 @@ use crate::Result;
 mod dyk;
 mod failedga;
 mod ga;
+mod itn;
 mod oldpr;
 mod otd;
 
@@ -35,6 +36,10 @@ pub fn template_name(t: &Template) -> String {
         .to_ascii_lowercase()
 }
 
+pub fn super_extract<T: Extractor + ?Sized>(t: &Template) -> Result<T::Value> {
+    Ok(serde_json::from_value(simple_extract(t)?)?)
+}
+
 pub trait Extractor {
     type Value: DeserializeOwned;
 
@@ -47,15 +52,15 @@ pub trait Extractor {
     }
 
     fn extract(&self, t: &Template) -> Result<Self::Value> {
-        Ok(serde_json::from_value(simple_extract(t)?)?)
+        super_extract::<Self>(t)
     }
 
-    fn merge_value_into<'cx>(
+    async fn merge_value_into<'cx>(
         &self,
         cx: ExtractContext<'cx>,
         value: Self::Value,
         into: &mut ArticleHistory,
-    );
+    ) -> Result<()>;
 }
 
 pub fn detach_template(t: &Template) {
@@ -102,9 +107,10 @@ pub fn extract_all<'cx>(
         };
     }
     extract!(dyk::DykExtractor);
-    // extract!(oldpr::OldPrExtractor);
+    extract!(oldpr::OldPrExtractor);
     extract!(ga::GaExtractor);
     extract!(failedga::FailedGaExtractor);
     extract!(otd::OtdExtractor);
+    extract!(itn::ItnExtractor);
     Ok(())
 }

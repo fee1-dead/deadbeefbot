@@ -55,12 +55,12 @@ impl Extractor for OtdExtractor {
         Ok(Otds { otds })
     }
 
-    fn merge_value_into<'cx>(
+    async fn merge_value_into<'cx>(
         &self,
         _cx: ExtractContext<'cx>,
         value: Otds,
         into: &mut ArticleHistory,
-    ) {
+    ) -> crate::Result<()> {
         for Otd { date, oldid } in value.otds {
             into.otds.push(ah::Otd {
                 date,
@@ -68,5 +68,6 @@ impl Extractor for OtdExtractor {
                 link: None,
             });
         }
+        Ok(())
     }
 }
