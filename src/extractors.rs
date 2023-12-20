@@ -89,7 +89,7 @@ pub fn detach_template(t: &Template) {
     t.detach();
 }
 
-pub fn extract_all<'cx>(
+pub async fn extract_all<'cx>(
     cx: ExtractContext<'cx>,
     t: &Template,
     ah: &mut ArticleHistory,
@@ -100,7 +100,7 @@ pub fn extract_all<'cx>(
             if e.is_extractable(t) {
                 debug!("extracted through `{}`", stringify!($v));
                 let val = e.extract(t)?;
-                e.merge_value_into(cx, val, ah);
+                e.merge_value_into(cx, val, ah).await?;
                 detach_template(t);
                 return Ok(());
             }

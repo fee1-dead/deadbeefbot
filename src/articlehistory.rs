@@ -21,6 +21,7 @@ use crate::{check_nobots, enwiki_bot, enwiki_parsoid, Result};
 #[allow(unused_imports)]
 use crate::{parsoid_from_url, site_from_url};
 
+mod extract;
 mod builder;
 
 use builder::{AddToParams, ParamBuilder};
@@ -406,111 +407,6 @@ impl ArticleHistory {
     }
 }
 
-pub struct Parameter {
-    pub index: usize,
-    pub ty: ParameterType,
-}
-
-impl Parameter {
-    pub fn print_into(self, v: &mut Vec<(String, String)>) {
-        let prefix = match self.ty {
-            ParameterType::Itn { .. } => "itn",
-            ParameterType::Dyk { .. } => "dyk",
-            ParameterType::Otd { .. } => "otd",
-        };
-
-        let prefix = format!("{prefix}{}", self.index);
-
-        macro_rules! print {
-            ($value:expr) => {
-                if let Some(x) = $value {
-                    // Parsoid doesn't change the parameter position if the parameter name isn't
-                    // changed. We insert {{subst:null}} at the end to trick the parser.
-                    v.push((
-                        format!("{prefix}{}{{{{subst:null}}}}", stringify!($value)),
-                        x,
-                    ));
-                }
-            };
-        }
-
-        match self.ty {
-            ParameterType::Itn { date, link } => {
-                print!(date);
-                print!(link);
-            }
-            ParameterType::Dyk { date, entry, nom } => {
-                print!(date);
-                print!(entry);
-                print!(nom);
-            }
-            ParameterType::Otd { date, oldid, link } => {
-                print!(date);
-                print!(oldid);
-                print!(link);
-            }
-        }
-
-        v.last_mut()
-            .unwrap()
-            .1
-            .push_str("{{subst:User:0xDeadbeef/newline}}");
-    }
-}
-
-#[derive(PartialEq, Eq, PartialOrd, Ord, Debug)]
-pub enum ParameterType {
-    Itn {
-        date: Option<String>,
-        link: Option<String>,
-    },
-    Dyk {
-        date: Option<String>,
-        entry: Option<String>,
-        nom: Option<String>,
-    },
-    Otd {
-        date: Option<String>,
-        oldid: Option<String>,
-        link: Option<String>,
-    }, /*
-       FailedGa {
-           date: Option<String>,
-           oldid: Option<String>,
-           page: Option<String>,
-           topic: Option<String>,
-       },*/
-}
-
-impl ParameterType {
-    pub fn is_empty(&self) -> bool {
-        fn check(x: &Option<String>) -> bool {
-            x.as_deref().map(str::trim).map_or(true, str::is_empty)
-        }
-        match self {
-            Self::Itn { date, link } => check(date) && check(link),
-            Self::Dyk {
-                date: a,
-                entry: b,
-                nom: c,
-            }
-            | Self::Otd {
-                date: a,
-                oldid: b,
-                link: c,
-            } => check(a) && check(b) && check(c),
-        }
-    }
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum Ty {
-    Itn,
-    Dyk,
-    Otd,
-}
-
-mod extract;
 
 pub async fn treat(
     client: &wiki::Bot,
@@ -580,7 +476,7 @@ pub async fn treat(
             return Ok(());
         }
 
-        crate::extractors::extract_all(cx, template, &mut ah)?;
+        crate::extractors::extract_all(cx, template, &mut ah).await?;
     }
 
     info!("extraction complete, AH: {ah:#?}");

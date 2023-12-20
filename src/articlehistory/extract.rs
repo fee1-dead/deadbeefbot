@@ -5,7 +5,6 @@ use serde_json::{Map, Value};
 use tracing::warn;
 
 use super::{ArticleHistory, Result};
-use crate::articlehistory::ParameterType;
 
 /// first extract useful information from article history.
 pub fn extract_info(article_history: &Template) -> Result<Option<ArticleHistory>> {
@@ -101,49 +100,4 @@ pub fn extract_info(article_history: &Template) -> Result<Option<ArticleHistory>
             Ok(None)
         }
     }
-}
-
-pub type ExtractResultMulti = Result<Option<Vec<ParameterType>>>;
-pub type ExtractResultSingle = Result<Option<ParameterType>>;
-
-pub fn extract_itn(t: &Template) -> ExtractResultMulti {
-    #[derive(Default, PartialEq, Eq, PartialOrd, Ord)]
-    pub struct Itn {
-        date: Option<String>,
-    }
-
-    let mut date1 = None;
-    let mut year1 = None;
-    let mut map: HashMap<u32, Itn> = HashMap::new();
-    for (param, value) in t.params() {
-        if param == "1" {
-            date1 = Some(value);
-        } else if param == "2" {
-            year1 = Some(value);
-        } else if let Some(num) = param.strip_prefix("date") {
-            map.entry(if num.is_empty() { 1 } else { num.parse()? })
-                .or_default()
-                .date = Some(value);
-        } else if param.strip_prefix("oldid").is_some() || param.strip_prefix("alt").is_some() {
-            // ignore oldid
-        } else {
-            warn!(?param, "unrecognized parameter");
-            return Ok(None);
-        }
-    }
-
-    if let Some(mut d) = date1 {
-        if let Some(y) = year1 {
-            d.push(' ');
-            d.push_str(&y);
-        }
-
-        map.entry(1).or_default().date = Some(d);
-    }
-
-    Ok(Some(
-        map.into_values()
-            .map(|Itn { date }| ParameterType::Itn { date, link: None })
-            .collect(),
-    ))
 }
