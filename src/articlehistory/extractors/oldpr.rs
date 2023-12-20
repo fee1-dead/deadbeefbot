@@ -61,7 +61,7 @@ impl Extractor for OldPrExtractor {
             .error_for_status()?
             .json::<ApiResponse>()
             .await?;
-        let result = if res.count < 10 {
+        let result = if res.count < 7 {
             if cx.allow_interactive {
                 println!(
                     "is this peer review reviewed? (https://en.wikipedia.org/wiki/{title}) [y/n/q]"

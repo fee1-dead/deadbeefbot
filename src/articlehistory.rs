@@ -1,5 +1,6 @@
 //! Merge `{{On this day}}` templates into `{{article history}}` if exists.
 
+use std::fs::File;
 use std::io::stdin;
 use std::process;
 
@@ -25,14 +26,12 @@ mod types;
 
 pub use types::*;
 
-pub async fn treat(
+pub async fn treat_inner(
     client: &wiki::Bot,
     parsoid: &parsoid::Client,
     title: &str,
     prompt: bool,
 ) -> Result<()> {
-    info!("Treating [[{}]]", title);
-
     let wikicode = parsoid.get(title).await?.into_mutable();
     let rev = wikicode.revision_id().unwrap();
     let templates = wikicode.filter_templates()?;
@@ -79,8 +78,7 @@ pub async fn treat(
         client,
         parsoid,
         title,
-        // TODO fix this
-        allow_interactive: true,
+        allow_interactive: false,
     };
 
     info!("Extracting [[{title}]], rev: {rev}, AH: {ah:#?}");
@@ -160,18 +158,41 @@ pub async fn treat(
     Ok(())
 }
 
+pub async fn treat(
+    client: &wiki::Bot,
+    parsoid: &parsoid::Client,
+    title: &str,
+    prompt: bool,
+    cnt: &mut u64,
+) -> Result<()> {
+    use std::io::Write;
+    info!("Treating [[{title}]]");
+
+    if let Err(e) = treat_inner(client, parsoid, title, prompt).await {
+        warn!(?e);
+        writeln!(File::open("./logs.txt")?, "Error while treating [[{title}]]: {e}")?;
+    } else {
+        *cnt += 1;
+    }
+
+    Ok(())
+}
+
 pub async fn main() -> Result<()> {
     // TODO testing mode, we be sampling!
-    let pages = reqwest::get("https://petscan.wmflabs.org/?psid=26657648&format=plain")
+    /*let pages = reqwest::get("https://petscan.wmflabs.org/?psid=26657648&format=plain")
         .await?
         .error_for_status()?
         .text()
-        .await?;
-    let pages: Vec<_> = pages.lines().collect();
+        .await?; */
+    // let pages: Vec<_> = pages.lines().collect();
+    let pages = std::fs::read_to_string("ptemp3.txt")?;
+    let mut pages: Vec<_> = pages.lines().collect();
     debug!("got {} pages from petscan", pages.len());
 
-    let pages = pages.choose_multiple(&mut thread_rng(), 3);
-    // let pages = vec!["Talk:Reign of Cleopatra"];
+    pages.shuffle(&mut thread_rng());
+    // let pages = pages.choose_multiple(&mut thread_rng(), 10);
+    // let pages = vec!["Talk:Warsaw Uprising (1794)"];
 
     // let client = site_from_url("https://test.wikipedia.org/w/api.php").await?;
     let client = enwiki_bot().await?;
@@ -179,8 +200,12 @@ pub async fn main() -> Result<()> {
     // let parsoid = parsoid_from_url("https://test.wikipedia.org/api/rest_v1")?;
     let parsoid = enwiki_parsoid()?;
 
+    let mut count = 0;
     for page in pages {
-        treat(&client, &parsoid, page, false).await?;
+        treat(&client, &parsoid, page, false, &mut count).await?;
+        if count >= 50 {
+            return Ok(())
+        }
         tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
     }
 

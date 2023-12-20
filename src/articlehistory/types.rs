@@ -340,7 +340,8 @@ impl ArticleHistory {
                 let mut found_ga = false;
                 status.retain(|x| match *x {
                     "GA" | "FGAN" | "DGA" if found_ga => false,
-                    "GA" | "FGAN" | "DGA" => {
+                    // note that a former FA trumps GA.
+                    "FFA" | "FA" | "GA" | "FGAN" | "DGA" => {
                         found_ga = true;
                         true
                     }
@@ -378,6 +379,7 @@ impl ArticleHistory {
             // either they have to completely match, or our status is more specific
             // than the previous status
             orig_status != &status && !status.contains(&format!("/{orig_status}"))
+            && !status.contains(&format!("{orig_status}/"))
         }) {
             bail!(
                 "current status mismatch: {:?} vs {:?}",
