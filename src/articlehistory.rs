@@ -1,9 +1,10 @@
 //! Merge `{{On this day}}` templates into `{{article history}}` if exists.
 
-use std::fs::File;
+use std::fs::{File, OpenOptions};
 use std::io::stdin;
 use std::process;
 
+use color_eyre::eyre::bail;
 use colored_diff::PrettyDifference;
 use extractors::ExtractContext;
 use parsoid::{Template, WikiMultinode, WikinodeIterator};
@@ -54,8 +55,7 @@ pub async fn treat_inner(
                     .lines()
                     .any(|name| name == x.name().trim_start_matches("Template:"))
             }) else {
-                warn!("skipping, article doesn't have wp banner shell");
-                return Ok(());
+                bail!("skipping, article doesn't have wp banner shell");
             };
 
             ah_created = Template::new_simple("Article history{{subst:User:0xDeadbeef/newline}}");
@@ -164,13 +164,14 @@ pub async fn treat(
     title: &str,
     prompt: bool,
     cnt: &mut u64,
+    f: &mut File,
 ) -> Result<()> {
     use std::io::Write;
     info!("Treating [[{title}]]");
 
     if let Err(e) = treat_inner(client, parsoid, title, prompt).await {
         warn!(?e);
-        writeln!(File::open("./logs.txt")?, "Error while treating [[{title}]]: {e}")?;
+        writeln!(f, "Error while treating [[{title}]]: {e}")?;
     } else {
         *cnt += 1;
     }
@@ -201,9 +202,10 @@ pub async fn main() -> Result<()> {
     let parsoid = enwiki_parsoid()?;
 
     let mut count = 0;
+    let mut f = OpenOptions::new().append(true).create(true).open("./logs.txt")?;
     for page in pages {
-        treat(&client, &parsoid, page, false, &mut count).await?;
-        if count >= 50 {
+        treat(&client, &parsoid, page, false, &mut count, &mut f).await?;
+        if count >= 1 {
             return Ok(())
         }
         tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;

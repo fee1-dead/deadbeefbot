@@ -39,8 +39,7 @@ impl Extractor for FailedGaExtractor {
             into.topic = Some(topic);
         }
         let Some(page) = value.page else {
-            warn!("no page");
-            bail!("no page");
+            bail!("FailedGA has no page");
         };
         into.actions.push(Action {
             kind: ActionKind::Gan,

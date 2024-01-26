@@ -23,7 +23,12 @@ impl Itn {
                 self.date.date.format("%Y %B %d")
             ))
         } else if let Some(oldid) = &self.oldid {
-            Some(format!("Special:PermanentLink/{oldid}"))
+            // TODO use let-chains
+            if !oldid.trim().is_empty() {
+                Some(format!("Special:PermanentLink/{oldid}"))
+            } else {
+                None
+            }
         } else {
             None
         }

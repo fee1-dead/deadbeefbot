@@ -89,7 +89,7 @@ impl Extractor for OldPrExtractor {
         let date = if let Some(date) = value.date {
             date
         } else {
-            let mut res = cx.client.client.get(format!("https://en.wikipedia.org/w/api.php?action=query&titles={title}&prop=revisions&rvlimit=1&rvprop=timestamp&format=json")).send().await?.error_for_status()?.json::<Value>().await?;
+            /*let mut res = cx.client.client.get(format!("https://en.wikipedia.org/w/api.php?action=query&titles={title}&prop=revisions&rvlimit=1&rvprop=timestamp&format=json")).send().await?.error_for_status()?.json::<Value>().await?;
             let val = res["query"]["pages"]
                 .as_object_mut()
                 .unwrap()
@@ -100,7 +100,8 @@ impl Extractor for OldPrExtractor {
             let Value::String(s) = val else {
                 bail!("nonstr")
             };
-            PreserveDate::try_from_string(s).map_err(|_| eyre!("nondate"))?
+            PreserveDate::try_from_string(s).map_err(|_| eyre!("nondate"))?*/
+            bail!("automatic determination of date is disabled")
         };
         into.actions.push(Action {
             kind: ActionKind::Pr,

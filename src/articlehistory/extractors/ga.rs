@@ -40,8 +40,7 @@ impl Extractor for GaExtractor {
             into.topic = Some(topic);
         }
         let Some(page) = value.page else {
-            warn!("no page");
-            bail!("no page");
+            bail!("GA has no page");
         };
         let title = cx.title;
         into.actions.push(Action {
