@@ -1,8 +1,8 @@
 use std::io::stdin;
 
-use color_eyre::eyre::{bail, eyre};
+use color_eyre::eyre::bail;
 use serde::Deserialize;
-use serde_json::Value;
+// use serde_json::Value;
 
 use super::{ExtractContext, Extractor};
 use crate::articlehistory::{Action, ActionKind, ArticleHistory, PreserveDate};

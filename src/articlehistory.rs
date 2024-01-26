@@ -208,7 +208,7 @@ pub async fn main() -> Result<()> {
         if count >= 1 {
             return Ok(())
         }
-        tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+        tokio::time::sleep(tokio::time::Duration::from_secs(7)).await;
     }
 
     Ok(())
