@@ -147,7 +147,7 @@ pub async fn treat_inner(
         client
             .build_edit(PageSpec::Title(title.to_owned()))
             .text(text)
-            .summary("merged OTD/ITN/DYK templates to {{article history}} ([[Wikipedia:Bots/Requests for approval/DeadbeefBot 3|BRFA]]) (in trial)")
+            .summary("implementing {{article history}} ([[Wikipedia:Bots/Requests for approval/DeadbeefBot 3|BRFA]])")
             .baserevid(rev as u32)
             .minor()
             .bot()
@@ -180,14 +180,13 @@ pub async fn treat(
 }
 
 pub async fn main() -> Result<()> {
-    // TODO testing mode, we be sampling!
-    /*let pages = reqwest::get("https://petscan.wmflabs.org/?psid=26657648&format=plain")
+    let pages = reqwest::get("https://petscan.wmflabs.org/?psid=26653654&format=plain")
         .await?
         .error_for_status()?
         .text()
-        .await?; */
+        .await?;
     // let pages: Vec<_> = pages.lines().collect();
-    let pages = std::fs::read_to_string("ptemp3.txt")?;
+    // let pages = std::fs::read_to_string("ptemp3.txt")?;
     let mut pages: Vec<_> = pages.lines().collect();
     debug!("got {} pages from petscan", pages.len());
 
@@ -205,10 +204,10 @@ pub async fn main() -> Result<()> {
     let mut f = OpenOptions::new().append(true).create(true).open("./logs.txt")?;
     for page in pages {
         treat(&client, &parsoid, page, false, &mut count, &mut f).await?;
-        if count >= 1 {
+        /* if count >= 1 {
             return Ok(())
-        }
-        tokio::time::sleep(tokio::time::Duration::from_secs(7)).await;
+        } */
+        tokio::time::sleep(tokio::time::Duration::from_secs(6)).await;
     }
 
     Ok(())
