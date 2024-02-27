@@ -1,0 +1,60 @@
+Error while treating [[Talk:Glenn T. Seaborg]]: can't determine if it was reviewed
+Error while treating [[Talk:Zhu De]]: topic mismatch
+Error while treating [[Talk:Ng On-yee]]: can't determine if it was reviewed
+Error while treating [[Talk:Claudia Octavia]]: unknown field `image`, expected one of `1`, `2`, `3`, `entry`, `nompage`, `views`
+Error while treating [[Talk:1886 eruption of Mount Tarawera]]: unknown field `image`, expected one of `1`, `2`, `3`, `entry`, `nompage`, `views`
+Error while treating [[Talk:Lauren Mitchell]]: unknown field `image`, expected one of `1`, `2`, `3`, `entry`, `nompage`, `views`
+Error while treating [[Talk:Tom Wills]]: automatic determination of date is disabled
+Error while treating [[Talk:Drusus Julius Caesar]]: can't determine if it was reviewed
+Error while treating [[Talk:Elizabeth Siddal]]: unknown field `image`, expected one of `1`, `2`, `3`, `entry`, `nompage`, `views`
+Error while treating [[Talk:Lola Baldwin]]: duplicate field `topic`
+Error while treating [[Talk:Jacquetta Hawkes]]: unknown field `image`, expected one of `1`, `2`, `3`, `entry`, `nompage`, `views`
+Error while treating [[Talk:Ladislaus III of Hungary]]: unknown field `2`, expected one of `1`, `date`, `oldid`, `subtopic`, `topic`, `small`, `page`
+Error while treating [[Talk:Seongsu Bridge disaster]]: unknown field `image`, expected one of `1`, `2`, `3`, `entry`, `nompage`, `views`
+Error while treating [[Talk:Thinzar Shunlei Yi]]: unknown field `image`, expected one of `1`, `2`, `3`, `entry`, `nompage`, `views`
+Error while treating [[Talk:Therese Forster]]: unknown field `image`, expected one of `1`, `2`, `3`, `entry`, `nompage`, `views`
+Error while treating [[Talk:Shahrbaraz]]: automatic determination of date is disabled
+Error while treating [[Talk:Louise McKinney]]: unknown field `image`, expected one of `1`, `2`, `3`, `entry`, `nompage`, `views`
+Error while treating [[Talk:Tom Acker]]: GA has no page
+Error while treating [[Talk:Ikuhiko Hata]]: GA has no page
+Error while treating [[Talk:Ariwara no Narihira]]: can't determine if it was reviewed
+Error while treating [[Talk:Rwandan Revolution]]: automatic determination of date is disabled
+Error while treating [[Talk:Svetolik Dragačevac]]: unknown field `note`, expected one of `1`, `date`, `oldid`, `subtopic`, `topic`, `small`, `page`
+Error while treating [[Talk:Typhoon Vera]]: skipping, article doesn't have wp banner shell
+Error while treating [[Talk:Wilhelm Busch]]: can't determine if it was reviewed
+Error while treating [[Talk:First landing of Filipinos in the United States]]: unknown field `article`, expected one of `1`, `2`, `3`, `entry`, `nompage`, `views`
+Error while treating [[Talk:Turkish Airlines Flight 301]]: skipping, article doesn't have wp banner shell
+Error while treating [[Talk:1988–1994 British broadcasting voice restrictions]]: HTTP status client error (404 Not Found) for url (https://en.wikipedia.org/w/rest.php/v1/page/Wikipedia%3APeer_review%2F1988%E2%80%9394_British_broadcasting_ban%2Farchive1/history/counts/edits)
+Error while treating [[Talk:Demolition of al-Baqi]]: unknown field `note`, expected one of `1`, `date`, `oldid`, `subtopic`, `topic`, `small`, `page`
+Error while treating [[Talk:'Adud al-Dawla]]: automatic determination of date is disabled
+Error while treating [[Talk:Ralph Milne]]: can't determine if it was reviewed
+Error while treating [[Talk:Edict of Expulsion]]: can't determine if it was reviewed
+Error while treating [[Talk:New Zealand White Ensign]]: unknown field `image`, expected one of `1`, `2`, `3`, `entry`, `nompage`, `views`
+Error while treating [[Talk:Regina Martínez Pérez]]: automatic determination of date is disabled
+Error while treating [[Talk:Unita Blackwell]]: can't determine if it was reviewed
+Error while treating [[Talk:Jimmie Rodgers]]: unknown field `image`, expected one of `1`, `2`, `3`, `entry`, `nompage`, `views`
+Error while treating [[Talk:Herbert Chapman]]: automatic determination of date is disabled
+Error while treating [[Talk:1973 Belmont Stakes]]: unknown field `nominator`, expected one of `1`, `date`, `oldid`, `subtopic`, `topic`, `small`, `page`
+Error while treating [[Talk:Mickey Mantle]]: unknown field `nominator`, expected one of `1`, `date`, `oldid`, `subtopic`, `topic`, `small`, `page`
+Error while treating [[Talk:1940 New England hurricane]]: duplicate field `topic`
+Error while treating [[Talk:Soňa Červená]]: unknown field `image`, expected one of `1`, `2`, `3`, `entry`, `nompage`, `views`
+Error while treating [[Talk:Lisa (Japanese musician, born 1987)]]: HTTP status client error (404 Not Found) for url (https://en.wikipedia.org/w/rest.php/v1/page/Wikipedia%3APeer_review%2FLisa_%28Japanese_musician%2C_born_1987%29%2Farchive1/history/counts/edits)
+Error while treating [[Talk:Billy Cannon]]: can't determine if it was reviewed
+Error while treating [[Talk:Times Square Theater]]: unknown field `image`, expected one of `1`, `2`, `3`, `entry`, `nompage`, `views`
+# Error while treating [[Talk:Mongol siege of Kaifeng]]: GA has no page
+Error while treating [[Talk:Death of Adolf Hitler]]: duplicate field `topic`
+Error while treating [[Talk:1934 Muroto typhoon]]: duplicate field `topic`
+Error while treating [[Talk:Esing Bakery incident]]: can't determine if it was reviewed
+Error while treating [[Talk:Aleksandar Đurić]]: can't determine if it was reviewed
+Error while treating [[Talk:Fu-Go balloon bomb]]: unknown field `image`, expected one of `1`, `2`, `3`, `entry`, `nompage`, `views`
+Error while treating [[Talk:Ming treasure voyages]]: unknown field `article`, expected one of `1`, `2`, `3`, `entry`, `nompage`, `views`
+Error while treating [[Talk:Athelm]]: duplicate field `topic`
+Error while treating [[Talk:Singapore Portrait Series currency notes]]: unknown field `small`, expected one of `1`, `2`, `3`, `entry`, `nompage`, `views`
+Error while treating [[Talk:Tomás Yepes]]: unknown field `image`, expected one of `1`, `2`, `3`, `entry`, `nompage`, `views`
+Error while treating [[Talk:Doris Sands Johnson]]: GA has no page
+Error while treating [[Talk:Wolfdietrich Schnurre]]: unknown field `nominator`, expected one of `1`, `date`, `oldid`, `subtopic`, `topic`, `small`, `page`
+Error while treating [[Talk:Peter Aduja]]: can't determine if it was reviewed
+Error while treating [[Talk:Ayscoghe Boucherett]]: can't determine if it was reviewed
+Error while treating [[Talk:Wulfhelm]]: duplicate field `topic`
+Error while treating [[Talk:Alex Morgan]]: can't determine if it was reviewed
+Error while treating [[Talk:Luttra Woman]]: unknown field `image`, expected one of `1`, `2`, `3`, `entry`, `nompage`, `views`
