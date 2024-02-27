@@ -180,7 +180,7 @@ pub async fn treat(
 }
 
 pub async fn main() -> Result<()> {
-    let pages = reqwest::get("https://petscan.wmflabs.org/?psid=26653654&format=plain")
+    let pages = reqwest::get("https://petscan.wmflabs.org/?psid=26653664&format=plain")
         .await?
         .error_for_status()?
         .text()
