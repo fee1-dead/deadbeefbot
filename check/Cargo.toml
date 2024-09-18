@@ -6,11 +6,11 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-dashmap = "5.4.0"
+dashmap = "6.1.0"
 futures = "0.3.28"
 deadbeefbot = { path = "../" }
 wiki = { git = "https://github.com/fee1-dead/wiki" }
-parsoid = "0.8.0"
+parsoid = "0.9.1"
 color-eyre = "0.6.2"
 serde_json = "1.0.91"
 tokio = { version = "1.23.0", features = ["full"] }

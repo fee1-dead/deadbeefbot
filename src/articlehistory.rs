@@ -131,7 +131,7 @@ pub async fn treat_inner(
                 client
                     .build_edit(PageSpec::Title(title.to_owned()))
                     .text(text)
-                    .summary("merged OTD/ITN/DYK templates to {{article history}} ([[Wikipedia:Bots/Requests for approval/DeadbeefBot 3|BRFA]]) (in trial)")
+                    .summary("implementing {{article history}} ([[Wikipedia:Bots/Requests for approval/DeadbeefBot 3|BRFA]])")
                     .baserevid(rev as u32)
                     .minor()
                     .bot()

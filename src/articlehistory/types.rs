@@ -5,6 +5,7 @@ use color_eyre::eyre::bail;
 use parsoid::map::IndexMap;
 use parsoid::Template;
 use serde::Deserialize;
+use timelib::Timezone;
 use tracing::info;
 
 use super::builder::{AddToParams, ParamBuilder};
@@ -18,7 +19,7 @@ pub struct PreserveDate {
 
 impl PreserveDate {
     pub fn try_from_string(x: String) -> Result<Self, String> {
-        let date = timelib::strtotime(x.clone(), None, None)?;
+        let date = timelib::strtotime(&x, None, &Timezone::parse("UTC").unwrap())?;
         Ok(PreserveDate {
             date: Utc.timestamp_opt(date, 0).unwrap(),
             orig: x,
@@ -388,7 +389,7 @@ impl ArticleHistory {
             )
         }
 
-        self.currentstatus = Some(status.into());
+        self.currentstatus = Some(status);
         Ok(())
     }
 

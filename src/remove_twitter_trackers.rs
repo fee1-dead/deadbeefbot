@@ -20,7 +20,7 @@ use crate::{
 };
 
 pub async fn main() -> color_eyre::Result<()> {
-    for site in SUPPORTED_SITES.into_iter().rev() {
+    for site in SUPPORTED_SITES.iter().rev() {
         run(site).await?;
     }
     Ok(())

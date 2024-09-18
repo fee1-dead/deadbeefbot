@@ -11,21 +11,21 @@ edition = "2021"
 [dependencies]
 color-eyre = "0.6.2"
 wiki = { git = "https://github.com/fee1-dead/wiki" }
-parsoid = "0.8.0"
+parsoid = "0.9.1"
 serde = { version = "1.0.152", features = ["derive"] }
 tokio = { version = "1.23.0", features = ["full"] }
 futures-util = "0.3.25"
 serde_json = "1.0.91"
-fancy-regex = "0.10.0"
+fancy-regex = "0.13.0"
 url = "2.3.1"
 form_urlencoded = "1.1.0"
-reqwest = { version = "0.11.13", features = ["rustls-tls"], default-features = false }
+reqwest = { version = "0.12.7", features = ["rustls-tls"], default-features = false }
 kuchiki = "0.8.1"
 tracing = "0.1.37"
 tracing-subscriber = { version = "0.3.16", features = ["env-filter"] }
 chrono = "0.4.23"
 rand = "0.8.5"
-copypasta = "0.8.2"
-timelib = "0.1.1"
+copypasta = "0.10.1"
+timelib = "0.3.5"
 colored-diff = "0.2.3"
 urlencoding = "2.1.3"

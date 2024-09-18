@@ -36,10 +36,10 @@ impl Extractor for OtdExtractor {
         let mut params = t.params();
         let mut otds = Vec::new();
         for n in 1.. {
-            let Some(date) = params.remove(&format!("date{n}")) else {
+            let Some(date) = params.swap_remove(&format!("date{n}")) else {
                 break;
             };
-            let Some(oldid) = params.remove(&format!("oldid{n}")) else {
+            let Some(oldid) = params.swap_remove(&format!("oldid{n}")) else {
                 break;
             };
             otds.push(Otd {
