@@ -18,7 +18,10 @@ pub struct Dyk {
     pub entry: Option<String>,
     pub nompage: Option<String>,
     /// ignored
-    pub views: Option<String>,
+    #[serde(rename = "views")]
+    pub _views: Option<String>,
+    #[serde(rename = "image")]
+    pub _image: Option<String>,
 }
 
 impl Extractor for DykExtractor {
@@ -40,7 +43,8 @@ impl Extractor for DykExtractor {
                 three,
                 date,
                 nompage,
-                views: _,
+                _views: _,
+                _image: _,
             } if year.chars().all(|c| c.is_ascii_digit()) => {
                 let date = format!("{date} {year}");
                 (date, entry.or(three), nompage)
@@ -51,13 +55,15 @@ impl Extractor for DykExtractor {
                 three: _,
                 nompage,
                 date,
-                views: _,
+                _views: _,
+                _image: _,
             } => (date, Some(entry), nompage),
             Dyk {
                 date,
                 entry,
                 nompage,
-                views: _,
+                _views: _,
+                _image: _,
                 three: _,
                 two: _,
             } => (date, entry, nompage),

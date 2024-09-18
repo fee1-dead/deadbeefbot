@@ -10,7 +10,7 @@ use extractors::ExtractContext;
 use parsoid::{Template, WikiMultinode, WikinodeIterator};
 use rand::seq::SliceRandom;
 use rand::thread_rng;
-use tracing::{debug, info, warn};
+use tracing::{debug, info, trace, warn};
 use wiki::api::RequestBuilderExt;
 use wiki::req::parse::{Parse, ParseProp};
 use wiki::req::{self, PageSpec};
@@ -81,7 +81,8 @@ pub async fn treat_inner(
         allow_interactive: false,
     };
 
-    info!("Extracting [[{title}]], rev: {rev}, AH: {ah:#?}");
+    info!("Extracting [[{title}]], rev: {rev}");
+    trace!("AH: {ah:#?}");
 
     for template in &templates {
         if check_nobots(template) {
@@ -91,7 +92,7 @@ pub async fn treat_inner(
         extractors::extract_all(cx, template, &mut ah).await?;
     }
 
-    info!("extraction complete, AH: {ah:#?}");
+    trace!("extraction complete, AH: {ah:#?}");
 
     ah.into_template(&mut article_history.clone())?;
 
