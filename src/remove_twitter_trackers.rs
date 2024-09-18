@@ -9,7 +9,7 @@ use futures_util::StreamExt;
 use kuchiki::traits::TendrilSink;
 use parsoid::WikinodeIterator;
 use reqwest::redirect::Policy;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 use url::Url;
 use wiki::api::QueryResponse;
 use wiki::req::search::{SearchGenerator, SearchInfo, SearchProp};
@@ -105,14 +105,14 @@ async fn run(site: &SiteCfg) -> color_eyre::Result<()> {
         .timeout(Duration::from_secs(5))
         .build()?;
     let re = Regex::new(
-        r"(?<!\?url=|/|cache:)https?://(?:mobile\.)?twitter\.com/\w+/status/\d+\?[^\s}<|]+",
+        r"(?<!\?url=|/|cache:)https?://(?:mobile\.)?(?:twitter|x)\.com/\w+/status/\d+\?[^\s}<|]+",
     )?;
     let wre = Regex::new(
-        r"https?://web\.archive\.org/web/([0-9]+)/(https?://(?:mobile\.)?twitter\.com/\w+/status/\d+(?:\?[^\s}<|]+)?)",
+        r"https?://web\.archive\.org/web/([0-9]+)/(https?://(?:mobile\.)?(?:twitter|x)\.com/\w+/status/\d+(?:\?[^\s}<|]+)?)",
     )?;
 
     const SEARCH: &str =
-        r"insource:/twitter\.com\/[a-zA-Z0-9]+\/status\/[0-9]+\/?\?([st]|cxt|ref_[a-z]+)=/";
+        r"insource:/(twitter|x)\.com\/[a-zA-Z0-9]+\/status\/[0-9]+\/?\?([st]|cxt|ref_[a-z]+)=/";
 
     static BAD_PARAMS: &[&str] = &["cxt", "ref_src", "ref_url", "s", "t"];
 
@@ -151,7 +151,10 @@ async fn run(site: &SiteCfg) -> color_eyre::Result<()> {
 
     while let Some(it) = stream.next().await {
         let it = it?;
-        let res: QueryResponse<SearchResponseBody> = serde_json::from_value(it)?;
+        let Ok(res): Result<QueryResponse<SearchResponseBody>, _> = serde_json::from_value(it) else {
+            warn!("stream ended?");
+            break;
+        };
         'treat: for mut page in res.query.pages {
             let rev = page.revisions.pop().unwrap();
             let page_id = page.pageid;
@@ -173,7 +176,7 @@ async fn run(site: &SiteCfg) -> color_eyre::Result<()> {
                 let wre = &wre;
                 let c = &c;
                 let edit_msg = &mut edit_msg;
-                let re: color_eyre::Result<()> = (|| async move {
+                let re: color_eyre::Result<()> = async move {
                     let name = template.name().to_lowercase();
                     if name != "template:cite web" && name != "template:cite tweet" {
                         return Ok(());
@@ -212,7 +215,7 @@ async fn run(site: &SiteCfg) -> color_eyre::Result<()> {
                             format!("https://web.archive.org/web/{new_timestamp}/{new_url}");
                         debug!(?timestamp, ?actual_url);
 
-                        let res = (|| async {
+                        let res = async {
                             // prevent spamming archive.org
                             tokio::time::sleep(Duration::from_secs(2)).await;
                             let text = c
@@ -256,8 +259,7 @@ async fn run(site: &SiteCfg) -> color_eyre::Result<()> {
                                 .set_param("archive-date", &date.to_string())
                                 .unwrap();
                             color_eyre::Result::<()>::Ok(())
-                        })()
-                        .await;
+                        }.await;
 
                         match res {
                             Ok(()) => {
@@ -271,8 +273,7 @@ async fn run(site: &SiteCfg) -> color_eyre::Result<()> {
                     }
 
                     Ok(())
-                })()
-                .await;
+                }.await;
 
                 if let Err(e) = re {
                     info!("did not fix archive: {e}");
