@@ -1,3 +1,4 @@
 fn main() -> color_eyre::Result<()> {
-    deadbeefbot::setup(deadbeefbot::articlehistory::main)
+    // existing AH, can fold in other info.
+    deadbeefbot::setup(|| deadbeefbot::articlehistory::main("https://petscan.wmflabs.org/?psid=26656482&format=plain"))
 }
