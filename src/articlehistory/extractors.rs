@@ -20,7 +20,7 @@ pub use articlehistory::ArticleHistoryExtractor;
 #[derive(Clone, Copy, Debug)]
 pub struct ExtractContext<'cx> {
     pub client: &'cx Bot,
-    pub parsoid: &'cx parsoid::Client,
+    // pub parsoid: &'cx parsoid::Client,
     pub title: &'cx str,
     pub allow_interactive: bool,
 }

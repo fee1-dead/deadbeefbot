@@ -9,7 +9,7 @@ use colored_diff::PrettyDifference;
 use extractors::ExtractContext;
 use parsoid::{Template, WikiMultinode, WikinodeIterator};
 use rand::seq::SliceRandom;
-use rand::thread_rng;
+use rand::rng;
 use tracing::{debug, info, trace, warn};
 use wiki::api::RequestBuilderExt;
 use wiki::req::parse::{Parse, ParseProp};
@@ -76,7 +76,7 @@ pub async fn treat_inner(
 
     let cx = ExtractContext {
         client,
-        parsoid,
+    //    parsoid,
         title,
         allow_interactive: false,
     };
@@ -191,7 +191,7 @@ pub async fn main(petscan: &str) -> Result<()> {
     let mut pages: Vec<_> = pages.lines().collect();
     debug!("got {} pages from petscan", pages.len());
 
-    pages.shuffle(&mut thread_rng());
+    pages.shuffle(&mut rng());
     // let pages = pages.choose_multiple(&mut thread_rng(), 10);
     // let pages = vec!["Talk:Warsaw Uprising (1794)"];
 

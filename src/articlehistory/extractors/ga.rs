@@ -13,6 +13,7 @@ pub struct Ga {
     pub oldid: Option<String>,
     #[serde(alias = "subtopic")]
     pub topic: Option<String>,
+    #[expect(dead_code)] // deny_unknown_fields
     pub small: Option<String>,
     pub page: Option<String>,
 }

@@ -24,7 +24,7 @@ pub struct OldPrExtractor;
 #[derive(Deserialize)]
 pub struct ApiResponse {
     pub count: u64,
-    pub limit: bool,
+    // pub limit: bool,
 }
 
 impl Extractor for OldPrExtractor {
