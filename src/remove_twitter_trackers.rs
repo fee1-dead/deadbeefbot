@@ -151,7 +151,8 @@ async fn run(site: &SiteCfg) -> color_eyre::Result<()> {
 
     while let Some(it) = stream.next().await {
         let it = it?;
-        let Ok(res): Result<QueryResponse<SearchResponseBody>, _> = serde_json::from_value(it) else {
+        let Ok(res): Result<QueryResponse<SearchResponseBody>, _> = serde_json::from_value(it)
+        else {
             warn!("stream ended?");
             break;
         };
@@ -259,7 +260,8 @@ async fn run(site: &SiteCfg) -> color_eyre::Result<()> {
                                 .set_param("archive-date", &date.to_string())
                                 .unwrap();
                             color_eyre::Result::<()>::Ok(())
-                        }.await;
+                        }
+                        .await;
 
                         match res {
                             Ok(()) => {
@@ -273,7 +275,8 @@ async fn run(site: &SiteCfg) -> color_eyre::Result<()> {
                     }
 
                     Ok(())
-                }.await;
+                }
+                .await;
 
                 if let Err(e) = re {
                     info!("did not fix archive: {e}");

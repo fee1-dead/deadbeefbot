@@ -1,4 +1,4 @@
-use std::fs;
+use std::{env, fs};
 
 use color_eyre::eyre::Context;
 use futures_util::{Future, Stream, TryStreamExt};
@@ -61,13 +61,17 @@ pub async fn enwiki_bot() -> Result<wiki::Bot> {
     site_from_url("https://en.wikipedia.org/w/api.php").await
 }
 
+fn oauth_token() -> Result<String> {
+    if let Ok(token) = env::var("BOT_TOKEN") {
+        return Ok(token);
+    }
+
+    Ok(fs::read_to_string("./token.secret").context("please put oauth2 token in token.secret")?)
+}
+
 pub async fn site_from_url(url: &str) -> Result<wiki::Bot> {
     Ok(ClientBuilder::new(url)
-        .oauth(
-            fs::read_to_string("./token.secret")
-                .context("please put oauth2 token in token.secret")?
-                .trim(),
-        )
+        .oauth(oauth_token()?.trim())
         .user_agent(UA)
         .build()
         .await?)

@@ -379,8 +379,9 @@ impl ArticleHistory {
         if self.currentstatus.as_ref().is_some_and(|orig_status| {
             // either they have to completely match, or our status is more specific
             // than the previous status
-            orig_status != &status && !status.contains(&format!("/{orig_status}"))
-            && !status.contains(&format!("{orig_status}/"))
+            orig_status != &status
+                && !status.contains(&format!("/{orig_status}"))
+                && !status.contains(&format!("{orig_status}/"))
         }) {
             bail!(
                 "current status mismatch: {:?} vs {:?}",

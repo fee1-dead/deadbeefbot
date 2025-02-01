@@ -202,7 +202,10 @@ pub async fn main(petscan: &str) -> Result<()> {
     let parsoid = enwiki_parsoid()?;
 
     let mut count = 0;
-    let mut f = OpenOptions::new().append(true).create(true).open("./logs.txt")?;
+    let mut f = OpenOptions::new()
+        .append(true)
+        .create(true)
+        .open("./logs.txt")?;
     for page in pages {
         treat(&client, &parsoid, page, false, &mut count, &mut f).await?;
         /* if count >= 1 {

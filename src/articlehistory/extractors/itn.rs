@@ -56,7 +56,9 @@ impl Extractor for ItnExtractor {
     fn extract(&self, t: &Template) -> crate::Result<Self::Value> {
         let mut params = t.params();
         let mut itns = Vec::new();
-        let alt = params.swap_remove("alt").map_or(false, |f| !f.trim().is_empty());
+        let alt = params
+            .swap_remove("alt")
+            .map_or(false, |f| !f.trim().is_empty());
         for n in 1.. {
             let date = if n == 1 {
                 params
@@ -74,7 +76,11 @@ impl Extractor for ItnExtractor {
                 params.swap_remove(&format!("date{n}"))
             };
             let Some(date) = date else { break };
-            let oldid = if n == 1 { params.swap_remove("oldid") } else { None };
+            let oldid = if n == 1 {
+                params.swap_remove("oldid")
+            } else {
+                None
+            };
             let oldid = oldid.or_else(|| params.swap_remove(&format!("oldid{n}")));
             let alt = alt
                 || params
