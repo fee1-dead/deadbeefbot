@@ -1,0 +1,1 @@
+task2: ./target/release/task2
