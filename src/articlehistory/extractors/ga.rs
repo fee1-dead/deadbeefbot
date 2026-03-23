@@ -43,6 +43,9 @@ impl Extractor for GaExtractor {
         let Some(page) = value.page else {
             bail!("GA has no page");
         };
+        if page.trim().is_empty() {
+            bail!("GA page is empty");
+        }
         let title = cx.title;
         into.actions.push(Action {
             kind: ActionKind::Gan,
